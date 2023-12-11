@@ -2,67 +2,200 @@ package memstorage
 
 import (
 	"errors"
-	"strconv"
+	"fmt"
+	"sync"
+
+	"github.com/AndreyVLZ/metrics/internal/metric"
+	"github.com/AndreyVLZ/metrics/internal/storage"
 )
 
-const (
-	gaugeConst = "gauge"
-	countConst = "counter"
+var (
+	ErrNotSupportedType    error = errors.New("not supported type")
+	ErrValueByNameNotFound error = errors.New("value by name not found")
 )
 
 type MemStorage struct {
-	gaugeStore map[string]float64
-	countStore map[string]int64
+	gaugeRepo storage.Repository
+	countRepo storage.Repository
 }
 
-func New() *MemStorage {
+func New(gRepo, cRepo storage.Repository) *MemStorage {
 	return &MemStorage{
-		gaugeStore: make(map[string]float64),
-		countStore: make(map[string]int64),
+		gaugeRepo: gRepo,
+		countRepo: cRepo,
 	}
 }
 
-func (s *MemStorage) Set(typeStr, name, val string) error {
-	var err error
+// Set Cохранение строкового значения метрики valStr по имени метрики name
+// Возвращает ошибку если тип метрики typeStr не поддерживается
+func (m *MemStorage) Set(typeStr, name, valStr string) error {
 	switch typeStr {
-	case gaugeConst:
-		err = s.setGauge(name, val)
-	case countConst:
-		err = s.setCount(name, val)
+	case metric.GaugeType.String():
+		return m.setGauge(name, valStr)
+	case metric.CounterType.String():
+		return m.setCounter(name, valStr)
 	default:
-		return errors.New("not support type")
+		return ErrNotSupportedType
 	}
+}
 
+// GaugeRepo Возвращает репозиторий для Gauge типа
+func (m *MemStorage) GaugeRepo() storage.Repository { return m.gaugeRepo }
+
+// CounterRepo Возвращает репозиторий для Counter типа
+func (m *MemStorage) CounterRepo() storage.Repository { return m.countRepo }
+
+// setGauge Cохранение строкового значения метрики valStr по имени метрики name для типа Gauge
+func (m *MemStorage) setGauge(name, valStr string) error {
+	return m.gaugeRepo.Set(name, valStr)
+}
+
+// setCounter Cохранение строкового значения метрики valStr по имени метрики name для типа Counter
+func (m *MemStorage) setCounter(name, valStr string) error {
+	return m.countRepo.Set(name, valStr)
+}
+
+/*
+func (m *MemStorage) Repo(mType metric.MetricType) (storage.Repository, error) {
+	switch mType {
+	case metric.CounterType:
+		return m.countRepo, nil
+	case metric.GaugeType:
+		return m.gaugeRepo, nil
+	default:
+		return nil, errors.New("no Repo by mType")
+	}
+}
+*/
+
+// CounterRepo
+type counterRepo struct {
+	m     sync.Mutex
+	store map[string]*metric.Counter
+}
+
+func NewCounterRepo() *counterRepo {
+	return &counterRepo{
+		store: make(map[string]*metric.Counter),
+	}
+}
+
+// Set Сохранение строкового значения valStr по имени name
+func (cr *counterRepo) Set(name, valStr string) error {
+	c, err := metric.NewCounter(valStr)
 	if err != nil {
 		return err
 	}
+
+	cr.SetVal(name, c)
 
 	return nil
 }
 
-func (s *MemStorage) setGauge(name, val string) error {
-	newFloat, err := strconv.ParseFloat(val, 64)
+// SetVal Сохранение значения val типа Counter по имени name
+func (cr *counterRepo) SetVal(name string, valC metric.Counter) {
+	cr.m.Lock()
+	defer cr.m.Unlock()
+
+	val, ok := cr.store[name]
+	if ok {
+		val.SetVal(valC)
+		return
+	}
+
+	cr.store[name] = &valC
+}
+
+// Get Возвращает значение типа string по имени name и
+// ошибку если значение отсутствует
+func (cr *counterRepo) Get(name string) (string, error) {
+	if el, ok := cr.store[name]; ok {
+		return el.String(), nil
+	}
+
+	return "", ErrValueByNameNotFound
+}
+
+// List Возвращает набор сохраненых значений
+func (cr *counterRepo) List() map[string]string {
+	m := make(map[string]string, len(cr.store))
+
+	for k, v := range cr.store {
+		m[k] = v.String()
+	}
+
+	return m
+}
+
+// GaugeRepo
+type gaugeRepo struct {
+	m     sync.Mutex
+	store map[string]*metric.Gauge
+}
+
+func NewGaugeRepo() *gaugeRepo {
+	return &gaugeRepo{
+		store: make(map[string]*metric.Gauge),
+	}
+}
+
+// Set Сохранение строкового значения valStr по имени name
+func (gr *gaugeRepo) Set(name, valStr string) error {
+	g, err := metric.NewGauge(valStr)
 	if err != nil {
 		return err
 	}
 
-	s.gaugeStore[name] = newFloat
+	gr.SetVal(name, g)
 
 	return nil
 }
 
-func (s *MemStorage) setCount(name, val string) error {
-	newInt, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return err
+// SetVal Сохранение значения val типа Gauge по имени name
+func (gr *gaugeRepo) SetVal(name string, val metric.Gauge) {
+	gr.m.Lock()
+	defer gr.m.Unlock()
+
+	valOld, ok := gr.store[name]
+	if ok {
+		valOld.SetVal(val)
+		//gr.store[name] = val
+		return
 	}
 
-	_, ok := s.countStore[name]
-	if !ok {
-		s.countStore[name] = 0
+	gr.store[name] = &val
+}
+
+// Get Возвращает значение типа string по имени name и
+// ошибку если значение отсутствует
+func (gr *gaugeRepo) Get(name string) (string, error) {
+	if el, ok := gr.store[name]; ok {
+		return el.String(), nil
 	}
 
-	s.countStore[name] += newInt
+	return "", ErrValueByNameNotFound
+}
 
-	return nil
+// List Возвращает набор сохраненых значений
+func (gr *gaugeRepo) List() map[string]string {
+	arr := make(map[string]string, len(gr.store))
+
+	for k, v := range gr.store {
+		arr[k] = v.String()
+	}
+
+	return arr
+}
+
+// NOTE: DELETE
+func (gr *gaugeRepo) Range() {
+	for name, g := range gr.store {
+		fmt.Printf("name: %s val: %s [%s]\n", name, g.String(), g.Type().String())
+	}
+}
+
+func (cr *counterRepo) Range() {
+	for name, g := range cr.store {
+		fmt.Printf("name: %s val: %s [%s]\n", name, g.String(), g.Type().String())
+	}
 }
