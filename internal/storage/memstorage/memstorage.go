@@ -38,7 +38,28 @@ func (m *MemStorage) Set(typeStr, name, valStr string) error {
 		return ErrNotSupportedType
 	}
 }
+func (m *MemStorage) Get(typeStr, name string) (string, error) {
+	switch typeStr {
+	case metric.GaugeType.String():
+		return m.getGauge(name)
+	case metric.CounterType.String():
+		return m.getCounter(name)
+	default:
+		return "", ErrNotSupportedType
+	}
+}
 
+/*
+func (m *MemStorage) List() map[string]string {
+	gRepo:= m.gaugeRepo.List()
+	cRepo:= m.countRepo.List()
+	list:= make(map[string]string,len(gRepo)+len(cRepo))
+	for k,v:=range gRepo{
+		lis
+	}
+	return m.gaugeRepo
+}
+*/
 // GaugeRepo Возвращает репозиторий для Gauge типа
 func (m *MemStorage) GaugeRepo() storage.Repository { return m.gaugeRepo }
 
@@ -50,9 +71,16 @@ func (m *MemStorage) setGauge(name, valStr string) error {
 	return m.gaugeRepo.Set(name, valStr)
 }
 
+func (m *MemStorage) getGauge(name string) (string, error) {
+	return m.gaugeRepo.Get(name)
+}
+
 // setCounter Cохранение строкового значения метрики valStr по имени метрики name для типа Counter
 func (m *MemStorage) setCounter(name, valStr string) error {
 	return m.countRepo.Set(name, valStr)
+}
+func (m *MemStorage) getCounter(name string) (string, error) {
+	return m.countRepo.Get(name)
 }
 
 /*
