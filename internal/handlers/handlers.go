@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
@@ -47,10 +46,11 @@ func (h *chiHandler) ListHandler(rw http.ResponseWriter, req *http.Request) {
 	<body>
 	{{ range $key, $value := .GRepo }}
 		<li><strong>{{ $key }}</strong>: {{ $value }}</li>
-	{{ end }}</body>
+	{{ end }}
 	{{ range $key, $value := .CRepo }}
 		<li><strong>{{ $key }}</strong>: {{ $value }}</li>
-	{{ end }}</body>
+	{{ end }}
+	</body>
 </html>`
 	t, err := template.New("webpage").Parse(tpl)
 	if err != nil {
@@ -86,10 +86,11 @@ func (h *chiHandler) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	h.store.GaugeRepo().Range()
-	h.store.CounterRepo().Range()
-	fmt.Println("OK")
+	/*
+		h.store.GaugeRepo().Range()
+		h.store.CounterRepo().Range()
+		fmt.Println("OK")
+	*/
 }
 
 func (h *chiHandler) GetValueHandler(rw http.ResponseWriter, req *http.Request) {
@@ -130,10 +131,11 @@ func (h *metricHandler) ListHandler(rw http.ResponseWriter, req *http.Request) {
 	<body>
 	{{ range $key, $value := .GRepo }}
 		<li><strong>{{ $key }}</strong>: {{ $value }}</li>
-	{{ end }}</body>
+	{{ end }}
 	{{ range $key, $value := .CRepo }}
 		<li><strong>{{ $key }}</strong>: {{ $value }}</li>
-	{{ end }}</body>
+	{{ end }}
+	</body>
 </html>`
 	t, err := template.New("webpage").Parse(tpl)
 	if err != nil {
@@ -202,10 +204,11 @@ func (h *metricHandler) UpdateHandler(rw http.ResponseWriter, req *http.Request)
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	h.store.GaugeRepo().Range()
-	h.store.CounterRepo().Range()
-	fmt.Println("OK")
+	/*
+		h.store.GaugeRepo().Range()
+		h.store.CounterRepo().Range()
+		fmt.Println("OK")
+	*/
 }
 
 // setContentType Установка заголовка Content-Type из contentType для текущего ответа

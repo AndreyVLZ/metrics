@@ -131,26 +131,19 @@ func (s *Stats) ReadToRepo(r storage.Repository) error {
 	return nil
 }
 
-/*
-func (s *Stats) All() map[string]m.Gauge {
+func (s *Stats) ReadToStore(store storage.Storage) error {
+	gRepo := store.GaugeRepo()
 	supportName := metricConst(0).supportName()
-	arr := make(map[string]m.Gauge, len(supportName))
-
 	for i := range supportName {
-		arr[supportName[i]] = s.Read(metricConst(i))
+		if err := gRepo.Set(supportName[i], s.Read(metricConst(i)).String()); err != nil {
+			return err
+		}
 	}
 
-	return arr
-}
-
-func (s *Stats) AllByRepo() storage.Repository {
-	store := memstorage.NewGaugeRepo()
-	supportName := metricConst(0).supportName()
-
-	for i := range supportName {
-		store.SetVal(supportName[i], s.Read(metricConst(i)))
+	cRepo := store.CounterRepo()
+	if err := cRepo.Set("TOTAL", s.Total().String()); err != nil {
+		return err
 	}
 
-	return store
+	return nil
 }
-*/

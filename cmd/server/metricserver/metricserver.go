@@ -2,6 +2,8 @@ package metricserver
 
 import (
 	"net/http"
+
+	"github.com/AndreyVLZ/metrics/cmd/server/config"
 )
 
 type Handlers interface {
@@ -16,14 +18,16 @@ type Router interface {
 
 type metricServer struct {
 	handler http.Handler
+	conf    config.Config
 }
 
-func New(handler http.Handler) *metricServer {
+func New(handler http.Handler, conf config.Config) *metricServer {
 	return &metricServer{
 		handler: handler,
+		conf:    conf,
 	}
 }
 
 func (s *metricServer) Start() error {
-	return http.ListenAndServe("localhost:8080", s.handler)
+	return http.ListenAndServe(s.conf.Addr, s.handler)
 }
