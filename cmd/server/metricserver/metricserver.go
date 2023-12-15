@@ -1,33 +1,36 @@
 package metricserver
 
 import (
+	"log"
 	"net/http"
-
-	"github.com/AndreyVLZ/metrics/cmd/server/config"
 )
 
-type Handlers interface {
-	UpdateHandler(http.ResponseWriter, *http.Request)
-	GetValueHandler(http.ResponseWriter, *http.Request)
-	ListHandler(http.ResponseWriter, *http.Request)
-}
-
-type Router interface {
-	SetHandlers(Handlers) http.Handler
-}
+type FuncOpt func(*metricServer)
 
 type metricServer struct {
 	handler http.Handler
-	conf    config.Config
+	addr    string
 }
 
-func New(handler http.Handler, conf config.Config) *metricServer {
-	return &metricServer{
+func New(handler http.Handler, opts ...FuncOpt) *metricServer {
+	srv := &metricServer{
 		handler: handler,
-		conf:    conf,
 	}
+
+	for _, opt := range opts {
+		opt(srv)
+	}
+
+	return srv
 }
 
 func (s *metricServer) Start() error {
-	return http.ListenAndServe(s.conf.Addr, s.handler)
+	log.Printf("start server %v\n", s.addr)
+	return http.ListenAndServe(s.addr, s.handler)
+}
+
+func SerAddr(addr string) FuncOpt {
+	return func(s *metricServer) {
+		s.addr = addr
+	}
 }

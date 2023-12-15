@@ -2,50 +2,87 @@ package metricagent
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
-	"github.com/AndreyVLZ/metrics/cmd/agent/config"
+	"github.com/AndreyVLZ/metrics/cmd/agent/stats"
 	"github.com/AndreyVLZ/metrics/internal/metric"
-	"github.com/AndreyVLZ/metrics/internal/stats"
 	"github.com/AndreyVLZ/metrics/internal/storage"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 )
 
-type MetricClient struct {
-	stats       stats.Stats
-	store       storage.Storage
-	contentType string
-	conf        *config.Config
-}
+const (
+	AddressDefault        = "localhost:8080"
+	PollIntervalDefault   = 2
+	ReportIntervalDefault = 10
+)
 
-func New(conf *config.Config) *MetricClient {
-	return &MetricClient{
-		stats:       *stats.NewStats(),
-		store:       memstorage.New(memstorage.NewGaugeRepo(), memstorage.NewCounterRepo()),
-		conf:        conf,
-		contentType: "text/plain",
+type FuncOpt func(c *MetricClient)
+
+func SetAddr(addr string) FuncOpt {
+	return func(c *MetricClient) {
+		c.addr = addr
 	}
 }
 
+func SetPollInterval(pollInterval int) FuncOpt {
+	return func(c *MetricClient) {
+		c.pollInterval = pollInterval
+	}
+}
+
+func SetReportInterval(reportInterval int) FuncOpt {
+	return func(c *MetricClient) {
+		c.reportInterval = reportInterval
+	}
+}
+
+type MetricClient struct {
+	stats          stats.Stats
+	store          storage.Storage
+	addr           string
+	pollInterval   int
+	reportInterval int
+}
+
+func New(opts ...FuncOpt) *MetricClient {
+	agent := &MetricClient{
+		stats:          *stats.NewStats(),
+		store:          memstorage.New(memstorage.NewGaugeRepo(), memstorage.NewCounterRepo()),
+		addr:           AddressDefault,
+		pollInterval:   PollIntervalDefault,
+		reportInterval: ReportIntervalDefault,
+	}
+
+	for _, opt := range opts {
+		opt(agent)
+	}
+
+	return agent
+}
+
 // AddMetric сохраняет в репозиторий значение произвольной метрики
-func (c *MetricClient) AddMetric(name string, typeStr string, valStr string) error {
-	return c.store.Set(name, typeStr, valStr)
+func (c *MetricClient) AddMetric(typeStr string, name string, valStr string) error {
+	return c.store.Set(typeStr, name, valStr)
 }
 
 // Start запускет агент
 func (c *MetricClient) Start() error {
+	log.Printf("start agent: %s %v %v\n", c.addr, c.pollInterval, c.reportInterval)
 	err := c.UpdateMetrics()
 	if err != nil {
+		fmt.Printf("ERR-1 %v\n", err)
 		return err
 	}
-	time.Sleep(time.Duration(c.conf.PollInterval) * time.Second)
+
+	time.Sleep(time.Duration(c.pollInterval) * time.Second)
 
 	err = c.SendMetrics()
 	if err != nil {
 		return err
 	}
-	time.Sleep(time.Duration(c.conf.ReportInterval) * time.Second)
+	time.Sleep(time.Duration(c.reportInterval) * time.Second)
 
 	return nil
 }
@@ -63,15 +100,21 @@ func (c *MetricClient) SendMetrics() error {
 			return err
 		}
 	}
+	for name, val := range c.store.CounterRepo().List() {
+		err := c.SendMetric(metric.CounterType.String(), name, val)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
-// SendMetric Оправка метрики агентом на сервер по адресу [addr:port]
-func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
+// SendMetric Оправка метрики агентом на сервер по адресу
+func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",
-		c.conf.Addr, typeStr, name, valStr)
+		c.addr, typeStr, name, valStr)
 	client := &http.Client{}
 
 	request, err := http.NewRequest(http.MethodPost, url, http.NoBody)
@@ -79,20 +122,30 @@ func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
 		return err
 	}
 
-	//c.setContentType(request)
-	request.Header.Set("Content-Type", c.contentType)
+	request.Header.Set("Content-Type", "text/plain")
 	response, err := client.Do(request)
 
 	if err != nil {
 		return err
 	}
 	//io.Copy(os.Stdout, response.Body)
-	response.Body.Close()
+	defer response.Body.Close()
 
 	return nil
 }
 
-// setContentType Установка заголовка "Content-Type" для текущего запроса
-func (c *MetricClient) setContentType(req *http.Request) {
-	req.Header.Set("Content-Type", c.contentType)
+func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
+	url := fmt.Sprintf(
+		"http://%s/update/%s/%s/%s",
+		c.addr, typeStr, name, valStr)
+	_ = url
+	url2 := "http://localhost:8080/update/gauge/MyGauge/123"
+	client := &http.Client{}
+	resp, err := client.Post(url2, "text/plain", http.NoBody)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
 }

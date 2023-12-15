@@ -11,17 +11,14 @@ import (
 )
 
 var ErrNoCorrectURLPath error = errors.New("no correct url path")
-var ErrOnlyPostRequest error = errors.New("only Post")
 
 type metricHandler struct {
-	store      storage.Storage
-	conentType string
+	store storage.Storage
 }
 
 func NewMetricHandler(store storage.Storage) *metricHandler {
 	return &metricHandler{
-		store:      store,
-		conentType: "text/plain",
+		store: store,
 	}
 }
 
@@ -81,16 +78,12 @@ func (h *chiHandler) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "bad", http.StatusNotFound)
 		return
 	}
+
 	err := h.store.Set(typeStr, name, val)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
-	/*
-		h.store.GaugeRepo().Range()
-		h.store.CounterRepo().Range()
-		fmt.Println("OK")
-	*/
 }
 
 func (h *chiHandler) GetValueHandler(rw http.ResponseWriter, req *http.Request) {
@@ -117,10 +110,7 @@ func (h *chiHandler) GetValueHandler(rw http.ResponseWriter, req *http.Request) 
 }
 
 func (h *metricHandler) ListHandler(rw http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		http.Error(rw, ErrOnlyPostRequest.Error(), http.StatusBadRequest)
-		return
-	}
+
 	const tpl = `
 <!DOCTYPE html>
 <html>
@@ -129,12 +119,14 @@ func (h *metricHandler) ListHandler(rw http.ResponseWriter, req *http.Request) {
 		<title>RunTime Metrics</title>
 	</head>
 	<body>
+	<ol type="1">
 	{{ range $key, $value := .GRepo }}
 		<li><strong>{{ $key }}</strong>: {{ $value }}</li>
 	{{ end }}
 	{{ range $key, $value := .CRepo }}
 		<li><strong>{{ $key }}</strong>: {{ $value }}</li>
 	{{ end }}
+	</ol>
 	</body>
 </html>`
 	t, err := template.New("webpage").Parse(tpl)
@@ -159,12 +151,7 @@ func (h *metricHandler) ListHandler(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (h *metricHandler) GetValueHandler(rw http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		http.Error(rw, ErrOnlyPostRequest.Error(), http.StatusBadRequest)
-		return
-	}
-
-	arrPath, err := parseURLPath2(req.URL.Path)
+	arrPath, err := parseURLPath(req.URL.Path, 3)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusNotFound)
 		return
@@ -181,19 +168,14 @@ func (h *metricHandler) GetValueHandler(rw http.ResponseWriter, req *http.Reques
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	//rw.WriteHeader(http.StatusOK)
 }
 
 func (h *metricHandler) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		http.Error(rw, ErrOnlyPostRequest.Error(), http.StatusBadRequest)
-		return
-	}
-
 	var err error
 
-	h.setContentType(rw)
-
-	arrPath, err := parseURLPath(req.URL.Path)
+	arrPath, err := parseURLPath(req.URL.Path, 4)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusNotFound)
 		return
@@ -204,35 +186,15 @@ func (h *metricHandler) UpdateHandler(rw http.ResponseWriter, req *http.Request)
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
-	/*
-		h.store.GaugeRepo().Range()
-		h.store.CounterRepo().Range()
-		fmt.Println("OK")
-	*/
-}
-
-// setContentType Установка заголовка Content-Type из contentType для текущего ответа
-func (h *metricHandler) setContentType(rw http.ResponseWriter) {
-	rw.Header().Set("Content-Type", h.conentType)
 }
 
 // parseURLPath Парсинг строки URL
-func parseURLPath(path string) ([]string, error) {
+func parseURLPath(path string, l int) ([]string, error) {
 	arrPath := strings.Split(path[1:], "/")
 
-	if len(arrPath) != 4 {
+	if len(arrPath) != l {
 		return nil, ErrNoCorrectURLPath
 	}
 
-	return arrPath[1:4], nil
-}
-
-func parseURLPath2(path string) ([]string, error) {
-	arrPath := strings.Split(path[1:], "/")
-
-	if len(arrPath) != 3 {
-		return nil, ErrNoCorrectURLPath
-	}
-
-	return arrPath[1:3], nil
+	return arrPath[1:l], nil
 }

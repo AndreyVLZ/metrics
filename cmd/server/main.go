@@ -3,26 +3,33 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
-	"github.com/AndreyVLZ/metrics/cmd/server/config"
+	"github.com/AndreyVLZ/metrics/cmd/server/handlers"
 	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
-	"github.com/AndreyVLZ/metrics/internal/handlers"
-	"github.com/AndreyVLZ/metrics/internal/route"
+	"github.com/AndreyVLZ/metrics/cmd/server/route"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 )
 
 func main() {
-	conf := config.Config{}
-	flag.StringVar(&conf.Addr, "a", "localhost:8080", "docs")
+	addrPtr := flag.String("a", "localhost:8080", "адрес эндпоинта HTTP-сервера")
 	flag.Parse()
-	//err := StartWhitServeMux()
-	err := StartWhitChiMux(conf)
+
+	var opts []metricserver.FuncOpt
+	opts = append(opts, metricserver.SerAddr(*addrPtr))
+
+	if addrENV, ok := os.LookupEnv("ADDRESS"); ok {
+		opts = append(opts, metricserver.SerAddr(addrENV))
+	}
+
+	//err := StartWhitServeMux(opts...)
+	err := StartWhitChiMux(opts...)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
-func StartWhitServeMux(conf config.Config) error {
+func StartWhitServeMux(opts ...metricserver.FuncOpt) error {
 	// сборка хранилища
 	gaugeRepo := memstorage.NewGaugeRepo()
 	counterRepo := memstorage.NewCounterRepo()
@@ -37,12 +44,12 @@ func StartWhitServeMux(conf config.Config) error {
 	handler := router.SetHandlers(hand)
 
 	// сервер
-	srv := metricserver.New(handler, conf)
+	srv := metricserver.New(handler, opts...)
 
 	return srv.Start()
 }
 
-func StartWhitChiMux(conf config.Config) error {
+func StartWhitChiMux(opts ...metricserver.FuncOpt) error {
 	// сборка хранилища
 	gaugeRepo := memstorage.NewGaugeRepo()
 	counterRepo := memstorage.NewCounterRepo()
@@ -57,7 +64,7 @@ func StartWhitChiMux(conf config.Config) error {
 	handler := router.SetHandlers(hand)
 
 	// сервер
-	srv := metricserver.New(handler, conf)
+	srv := metricserver.New(handler, opts...)
 
 	return srv.Start()
 }

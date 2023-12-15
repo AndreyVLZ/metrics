@@ -15,11 +15,11 @@ var (
 )
 
 type MemStorage struct {
-	gaugeRepo storage.Repository
-	countRepo storage.Repository
+	gaugeRepo *gaugeRepo
+	countRepo *counterRepo
 }
 
-func New(gRepo, cRepo storage.Repository) *MemStorage {
+func New(gRepo *gaugeRepo, cRepo *counterRepo) *MemStorage {
 	return &MemStorage{
 		gaugeRepo: gRepo,
 		countRepo: cRepo,

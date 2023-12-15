@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/AndreyVLZ/metrics/cmd/server/middleware"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,8 +30,7 @@ func TestUpdateHandler(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/update/counter/myCounter/10",
 			want: want{
-				code: http.StatusOK,
-				//response:    `{"status":"ok"}`,
+				code:        http.StatusOK,
 				contentType: "text/plain",
 			},
 		},
@@ -73,7 +73,13 @@ func TestUpdateHandler(t *testing.T) {
 				memstorage.NewGaugeRepo(),
 				memstorage.NewCounterRepo(),
 			))
-			mh.UpdateHandler(w, request)
+
+			handler := http.HandlerFunc(
+				middleware.ContentType("text/plain",
+					middleware.Method(http.MethodPost, mh.UpdateHandler),
+				),
+			)
+			handler.ServeHTTP(w, request)
 
 			res := w.Result()
 			// проверяем код ответа
@@ -113,7 +119,7 @@ func TestParseURLPath(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			got, exErr := parseURLPath(test.path)
+			got, exErr := parseURLPath(test.path, 4)
 			if !errors.Is(test.err, exErr) {
 				t.Errorf("ERR parseURLPath() = %v, want %v", exErr, test.err)
 			}
