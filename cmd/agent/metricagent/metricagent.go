@@ -111,7 +111,7 @@ func (c *MetricClient) SendMetrics() error {
 }
 
 // SendMetric Оправка метрики агентом на сервер по адресу
-func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
+func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",
 		c.addr, typeStr, name, valStr)
@@ -134,7 +134,7 @@ func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
 	return nil
 }
 
-func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
+func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",
 		c.addr, typeStr, name, valStr)
