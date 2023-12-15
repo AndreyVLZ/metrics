@@ -1,9 +1,10 @@
 package metricserver
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 
-	"github.com/AndreyVLZ/metrics/internal/handlers"
 	"github.com/AndreyVLZ/metrics/internal/storage"
 )
 
@@ -17,9 +18,8 @@ func New(store storage.Storage) *metricServer {
 		store: store,
 		mux:   http.NewServeMux(),
 	}
-	mh := handlers.NewMetricHandler(store)
-	//srv.mux.Handle("/update/",mh.UpdateHandler()
-	srv.mux.HandleFunc("/update/", mh.UpdateHandler)
+
+	srv.mux.HandleFunc("/update/", srv.updateHandler)
 
 	return srv
 }
@@ -28,7 +28,6 @@ func (s *metricServer) Start() error {
 	return http.ListenAndServe("localhost:8080", s.mux)
 }
 
-/*
 func (s *metricServer) updateHandler(rw http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(rw, "Only Post", http.StatusBadRequest)
@@ -60,5 +59,3 @@ func parseURLPath(path string) ([]string, error) {
 
 	return arrPath[1:4], nil
 }
-
-*/
