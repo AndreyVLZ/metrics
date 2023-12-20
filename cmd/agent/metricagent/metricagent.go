@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/cmd/agent/stats"
@@ -44,6 +45,7 @@ type MetricClient struct {
 	addr           string
 	pollInterval   int
 	reportInterval int
+	client         *http.Client
 }
 
 func New(opts ...FuncOpt) *MetricClient {
@@ -53,6 +55,7 @@ func New(opts ...FuncOpt) *MetricClient {
 		addr:           AddressDefault,
 		pollInterval:   PollIntervalDefault,
 		reportInterval: ReportIntervalDefault,
+		client:         &http.Client{},
 	}
 
 	for _, opt := range opts {
@@ -70,52 +73,57 @@ func (c *MetricClient) AddMetric(typeStr string, name string, valStr string) err
 // Start запускет агент
 func (c *MetricClient) Start() error {
 	log.Printf("start agent: %s %v %v\n", c.addr, c.pollInterval, c.reportInterval)
-	err := c.UpdateMetrics()
-	if err != nil {
-		fmt.Printf("ERR-1 %v\n", err)
-		return err
-	}
+	var wg sync.WaitGroup
 
-	time.Sleep(time.Duration(c.pollInterval) * time.Second)
+	wg.Add(1)
+	go c.UpdateMetrics(&wg)
+	wg.Add(1)
+	go c.SendMetrics(&wg)
 
-	err = c.SendMetrics()
-	if err != nil {
-		return err
-	}
-	time.Sleep(time.Duration(c.reportInterval) * time.Second)
+	wg.Wait()
 
 	return nil
 }
 
 // UpdateMetrics Обновление всех метрик из пакета runtime и сохраниение в хранилище
-func (c *MetricClient) UpdateMetrics() error {
-	return c.stats.ReadToStore(c.store)
+func (c *MetricClient) UpdateMetrics(wg *sync.WaitGroup) {
+	var err error
+
+	for err == nil {
+		time.Sleep(time.Duration(c.pollInterval) * time.Second)
+		err = c.stats.ReadToStore(c.store)
+	}
+	wg.Done()
+	log.Printf("err> %v\n", err)
 }
 
 // SendMetrics Чтение и отправка всех сохраненых метрик
-func (c *MetricClient) SendMetrics() error {
-	for name, val := range c.store.GaugeRepo().List() {
-		err := c.SendMetric(metric.GaugeType.String(), name, val)
-		if err != nil {
-			return err
-		}
-	}
-	for name, val := range c.store.CounterRepo().List() {
-		err := c.SendMetric(metric.CounterType.String(), name, val)
-		if err != nil {
-			return err
-		}
-	}
+func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
+	var err error
 
-	return nil
+	for err == nil {
+		time.Sleep(time.Duration(c.reportInterval) * time.Second)
+		for name, val := range c.store.GaugeRepo().List() {
+			err = c.SendMetric(metric.GaugeType.String(), name, val)
+			if err != nil {
+				log.Printf("err> %v\n", err)
+			}
+		}
+		for name, val := range c.store.CounterRepo().List() {
+			err = c.SendMetric(metric.CounterType.String(), name, val)
+			if err != nil {
+				log.Printf("err> %v\n", err)
+			}
+		}
+	}
+	wg.Done()
 }
 
 // SendMetric Оправка метрики агентом на сервер по адресу
-func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
+func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",
 		c.addr, typeStr, name, valStr)
-	client := &http.Client{}
 
 	request, err := http.NewRequest(http.MethodPost, url, http.NoBody)
 	if err != nil {
@@ -123,29 +131,27 @@ func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
 	}
 
 	request.Header.Set("Content-Type", "text/plain")
-	response, err := client.Do(request)
+	response, err := c.client.Do(request)
 
 	if err != nil {
 		return err
 	}
-	//io.Copy(os.Stdout, response.Body)
+
 	defer response.Body.Close()
 
 	return nil
 }
 
-func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
+func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",
 		c.addr, typeStr, name, valStr)
-	_ = url
-	url2 := "http://localhost:8080/update/gauge/MyGauge/123"
-	client := &http.Client{}
-	resp, err := client.Post(url2, "text/plain", http.NoBody)
+
+	res, err := c.client.Post(url, "text/plain", http.NoBody)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
 	return nil
 }

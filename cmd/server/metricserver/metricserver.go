@@ -29,7 +29,7 @@ func (s *metricServer) Start() error {
 	return http.ListenAndServe(s.addr, s.handler)
 }
 
-func SerAddr(addr string) FuncOpt {
+func SetAddr(addr string) FuncOpt {
 	return func(s *metricServer) {
 		s.addr = addr
 	}

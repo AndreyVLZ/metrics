@@ -2,7 +2,6 @@ package memstorage
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/AndreyVLZ/metrics/internal/metric"
@@ -49,17 +48,6 @@ func (m *MemStorage) Get(typeStr, name string) (string, error) {
 	}
 }
 
-/*
-func (m *MemStorage) List() map[string]string {
-	gRepo:= m.gaugeRepo.List()
-	cRepo:= m.countRepo.List()
-	list:= make(map[string]string,len(gRepo)+len(cRepo))
-	for k,v:=range gRepo{
-		lis
-	}
-	return m.gaugeRepo
-}
-*/
 // GaugeRepo Возвращает репозиторий для Gauge типа
 func (m *MemStorage) GaugeRepo() storage.Repository { return m.gaugeRepo }
 
@@ -82,19 +70,6 @@ func (m *MemStorage) setCounter(name, valStr string) error {
 func (m *MemStorage) getCounter(name string) (string, error) {
 	return m.countRepo.Get(name)
 }
-
-/*
-func (m *MemStorage) Repo(mType metric.MetricType) (storage.Repository, error) {
-	switch mType {
-	case metric.CounterType:
-		return m.countRepo, nil
-	case metric.GaugeType:
-		return m.gaugeRepo, nil
-	default:
-		return nil, errors.New("no Repo by mType")
-	}
-}
-*/
 
 // CounterRepo
 type counterRepo struct {
@@ -213,17 +188,4 @@ func (gr *gaugeRepo) List() map[string]string {
 	}
 
 	return arr
-}
-
-// NOTE: DELETE
-func (gr *gaugeRepo) Range() {
-	for name, g := range gr.store {
-		fmt.Printf("name: %s val: %s [%s]\n", name, g.String(), g.Type().String())
-	}
-}
-
-func (cr *counterRepo) Range() {
-	for name, g := range cr.store {
-		fmt.Printf("name: %s val: %s [%s]\n", name, g.String(), g.Type().String())
-	}
 }

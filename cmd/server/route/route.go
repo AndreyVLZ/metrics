@@ -1,6 +1,7 @@
 package route
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/middleware"
@@ -48,6 +49,12 @@ func (s *serveMux) SetHandlers(mh Handlers) http.Handler {
 	return s.mux
 }
 
+const (
+	TypeChiConst  = "typeStr"
+	NameChiConst  = "name"
+	ValueChiConst = "val"
+)
+
 // chiMux
 type chiMux struct {
 	mux *chi.Mux
@@ -60,10 +67,11 @@ func NewChiMux() *chiMux {
 }
 
 func (c *chiMux) SetHandlers(h Handlers) http.Handler {
+	endPoint := fmt.Sprintf("/{%s}/{%s}/{%s}", TypeChiConst, NameChiConst, ValueChiConst)
 	c.mux.Route("/", func(r chi.Router) {
 		r.Get("/", h.ListHandler)
 		r.Route("/update", func(r chi.Router) {
-			r.Post("/{typeStr}/{name}/{val}",
+			r.Post(endPoint,
 				middleware.ContentType("text/plain",
 					h.UpdateHandler,
 				),

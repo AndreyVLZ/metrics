@@ -121,18 +121,6 @@ func (s *Stats) Total() m.Counter {
 	return s.total
 }
 
-/*
-// ReadToRepo Получение и сохранение всех поддерживаемых метрик в репозиторий r
-func (s *Stats) ReadToRepo(r storage.Repository) error {
-	supportName := metricConst(0).supportName()
-	for i := range supportName {
-		r.Set(supportName[i], s.Read(metricConst(i)).String())
-	}
-
-	return nil
-}
-*/
-
 // ReadToStore Получение и сохранение всех поддерживаемых метрик в хранилище s
 func (s *Stats) ReadToStore(store storage.Storage) error {
 	gRepo := store.GaugeRepo()

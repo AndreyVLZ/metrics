@@ -16,46 +16,19 @@ func main() {
 	flag.Parse()
 
 	var opts []metricserver.FuncOpt
-	opts = append(opts, metricserver.SerAddr(*addrPtr))
+	opts = append(opts, metricserver.SetAddr(*addrPtr))
 
 	if addrENV, ok := os.LookupEnv("ADDRESS"); ok {
-		opts = append(opts, metricserver.SerAddr(addrENV))
+		opts = append(opts, metricserver.SetAddr(addrENV))
 	}
 
-	//err := StartWhitServeMux(opts...)
-	err := StartWhitChiMux(opts...)
-	if err != nil {
-		log.Println(err)
-	}
-}
-
-func StartWhitServeMux(opts ...metricserver.FuncOpt) error {
 	// сборка хранилища
 	gaugeRepo := memstorage.NewGaugeRepo()
 	counterRepo := memstorage.NewCounterRepo()
 	store := memstorage.New(gaugeRepo, counterRepo)
+
 	// хендлеры
-	hand := handlers.NewMetricHandler(store)
-
-	// объявление роутера ServeMux
-	router := route.NewServeMux()
-
-	// установка хендлеров в роутер
-	handler := router.SetHandlers(hand)
-
-	// сервер
-	srv := metricserver.New(handler, opts...)
-
-	return srv.Start()
-}
-
-func StartWhitChiMux(opts ...metricserver.FuncOpt) error {
-	// сборка хранилища
-	gaugeRepo := memstorage.NewGaugeRepo()
-	counterRepo := memstorage.NewCounterRepo()
-	store := memstorage.New(gaugeRepo, counterRepo)
-	// хендлеры
-	hand := handlers.NewChiHandler(store)
+	hand := handlers.NewChiHandle(store)
 
 	// объявление роутера ChiMux
 	router := route.NewChiMux()
@@ -66,5 +39,8 @@ func StartWhitChiMux(opts ...metricserver.FuncOpt) error {
 	// сервер
 	srv := metricserver.New(handler, opts...)
 
-	return srv.Start()
+	err := srv.Start()
+	if err != nil {
+		log.Println(err)
+	}
 }

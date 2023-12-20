@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/middleware"
@@ -69,7 +67,7 @@ func TestUpdateHandler(t *testing.T) {
 			// создаём новый Recorder
 			w := httptest.NewRecorder()
 
-			mh := NewMetricHandler(memstorage.New(
+			mh := NewMainHandle(memstorage.New(
 				memstorage.NewGaugeRepo(),
 				memstorage.NewCounterRepo(),
 			))
@@ -91,41 +89,6 @@ func TestUpdateHandler(t *testing.T) {
 			//require.NoError(t, err)
 			//assert.JSONEq(t, test.want.response, string(resBody))
 			assert.Equal(t, test.want.contentType, res.Header.Get("Content-Type"))
-		})
-	}
-}
-
-func TestParseURLPath(t *testing.T) {
-	tests := []struct {
-		name string
-		path string
-		res  []string
-		err  error
-	}{
-		{
-			name: "ok",
-			path: "update/counter/MyCounter/10",
-			res:  []string{"counter", "MyCounter", "10"},
-			err:  nil,
-		},
-		{
-			name: "false",
-			path: "update/counter/MyCounter",
-			res:  nil,
-			err:  ErrNoCorrectURLPath,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-
-			got, exErr := parseURLPath(test.path, 4)
-			if !errors.Is(test.err, exErr) {
-				t.Errorf("ERR parseURLPath() = %v, want %v", exErr, test.err)
-			}
-			if !reflect.DeepEqual(got, test.res) {
-				t.Errorf("parseURLPath() = %v, want %v", got, test.res)
-			}
 		})
 	}
 }

@@ -38,7 +38,6 @@ func main() {
 		}
 	}
 
-	//client := metricagent.New(opts...)
 	client := metricagent.New(opts...)
 
 	err := client.AddMetric("gauge", "meMetric", "123")
