@@ -16,12 +16,12 @@ type GetURLPath struct {
 }
 
 func NewGetURLPath(arr []string) *GetURLPath {
-	getUrlPath := new(GetURLPath)
+	getURLPath := new(GetURLPath)
 	for i := range arr {
-		getUrlPath.set(i, arr[i])
+		getURLPath.set(i, arr[i])
 	}
 
-	return getUrlPath
+	return getURLPath
 }
 
 func (urlPath *GetURLPath) Type() string { return urlPath.typeStr }
@@ -50,12 +50,12 @@ type UpdateURLPath struct {
 }
 
 func NewUpdateURLPath(arr []string) *UpdateURLPath {
-	updateUrlPath := &UpdateURLPath{GetURLPath: new(GetURLPath)}
+	updateURLPath := &UpdateURLPath{GetURLPath: new(GetURLPath)}
 	for i := range arr {
-		updateUrlPath.set(i, arr[i])
+		updateURLPath.set(i, arr[i])
 	}
 
-	return updateUrlPath
+	return updateURLPath
 }
 
 func (urlPath *UpdateURLPath) Value() string { return urlPath.value }

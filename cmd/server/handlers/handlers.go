@@ -122,12 +122,12 @@ func NewChiHandle(store storage.Storage) *chiHandle {
 }
 
 func (h *chiHandle) GetValueHandler(rw http.ResponseWriter, req *http.Request) {
-	getUrlPath := path.NewGetURLPath([]string{
+	getURLPath := path.NewGetURLPath([]string{
 		chi.URLParam(req, route.TypeChiConst),
 		chi.URLParam(req, route.NameChiConst),
 	})
 
-	h.getValue(getUrlPath, rw)
+	h.getValue(getURLPath, rw)
 }
 
 func (h *chiHandle) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
