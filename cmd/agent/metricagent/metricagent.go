@@ -120,28 +120,6 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 }
 
 // SendMetric Оправка метрики агентом на сервер по адресу
-func (c *MetricClient) SendMetric1(typeStr, name, valStr string) error {
-	url := fmt.Sprintf(
-		"http://%s/update/%s/%s/%s",
-		c.addr, typeStr, name, valStr)
-
-	request, err := http.NewRequest(http.MethodPost, url, http.NoBody)
-	if err != nil {
-		return err
-	}
-
-	request.Header.Set("Content-Type", "text/plain")
-	response, err := c.client.Do(request)
-
-	if err != nil {
-		return err
-	}
-
-	defer response.Body.Close()
-
-	return nil
-}
-
 func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",

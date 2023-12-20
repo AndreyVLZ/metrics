@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
@@ -69,7 +68,6 @@ func (h *MainHandle) ListHandler(rw http.ResponseWriter, req *http.Request) {
 	err := h.tmpls.ExecuteTemplate(rw, "List", data)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
 	}
 }
 
@@ -88,10 +86,7 @@ func (h *MainHandle) getValue(getURLPath *path.GetURLPath, rw http.ResponseWrite
 	_, err = rw.Write([]byte(val))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
-		return
 	}
-
-	//rw.WriteHeader(http.StatusOK)
 }
 
 func (h *MainHandle) updateValue(urlPath *path.UpdateURLPath, rw http.ResponseWriter) {
@@ -102,10 +97,7 @@ func (h *MainHandle) updateValue(urlPath *path.UpdateURLPath, rw http.ResponseWr
 
 	err := h.store.Set(urlPath.Type(), urlPath.Name(), urlPath.Value())
 	if err != nil {
-		fmt.Printf("ERRS %v\n", err)
-		fmt.Printf("type %v name %v val %v\n", urlPath.Type(), urlPath.Name(), urlPath.Value())
 		http.Error(rw, err.Error(), http.StatusBadRequest)
-		return
 	}
 
 	rw.WriteHeader(http.StatusOK)
