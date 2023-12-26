@@ -8,6 +8,9 @@ import (
 	"github.com/AndreyVLZ/metrics/cmd/server/handlers"
 	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
 	"github.com/AndreyVLZ/metrics/cmd/server/route"
+
+	//sLog "github.com/AndreyVLZ/metrics/internal/log/slog"
+	"github.com/AndreyVLZ/metrics/internal/log/zap"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 )
 
@@ -36,8 +39,12 @@ func main() {
 	// установка хендлеров в роутер
 	handler := router.SetHandlers(hand)
 
+	//logger slog
+	//logger := sLog.New()
+	//logger zap
+	logger := zap.New(zap.DefaultConfig())
 	// сервер
-	srv := metricserver.New(handler, opts...)
+	srv := metricserver.New(logger, handler, opts...)
 
 	err := srv.Start()
 	if err != nil {
