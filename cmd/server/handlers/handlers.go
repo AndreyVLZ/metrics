@@ -99,8 +99,6 @@ func (h *MainHandle) updateValue(urlPath *path.UpdateURLPath, rw http.ResponseWr
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 	}
-
-	rw.WriteHeader(http.StatusOK)
 }
 
 type chiHandle struct {
