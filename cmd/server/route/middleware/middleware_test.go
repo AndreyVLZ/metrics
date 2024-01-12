@@ -57,20 +57,3 @@ func TestMethod(t *testing.T) {
 		})
 	}
 }
-
-func TestContentType(t *testing.T) {
-	test := struct {
-		contentType string
-	}{
-		contentType: "Test",
-	}
-	nextHandler := func(rw http.ResponseWriter, req *http.Request) {
-	}
-	req := httptest.NewRequest(http.MethodGet, "/update/", nil)
-	rec := httptest.NewRecorder()
-
-	methodContentType := ContentType(test.contentType, nextHandler)
-	methodContentType.ServeHTTP(rec, req)
-
-	assert.Equal(t, rec.Header().Get("Content-Type"), test.contentType)
-}

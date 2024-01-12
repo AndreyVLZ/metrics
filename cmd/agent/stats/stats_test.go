@@ -137,20 +137,6 @@ func TestRead(t *testing.T) {
 	assert.Equal(t, len(allMetric), int(stats.Total()))
 }
 
-/*
-func TestAll(t *testing.T) {
-	stats := NewStats()
-	repo := stats.All()
-	assert.Equal(t, len(metricConst(0).supportName()), len(repo))
-}
-
-func TestAllByRepo(t *testing.T) {
-	stats := NewStats()
-	repo := stats.AllByRepo()
-	assert.Equal(t, len(metricConst(0).supportName()), len(repo.List()))
-}
-*/
-
 func TestTotal(t *testing.T) {
 	type a struct {
 		start int

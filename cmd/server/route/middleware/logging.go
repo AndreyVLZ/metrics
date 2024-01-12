@@ -1,36 +1,33 @@
 package middleware
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 )
 
-var ErrOnlyPostRequest error = errors.New("only Post")
-
-type (
-	requestData struct {
-		uri      string
-		method   string
-		duration time.Duration
-	}
-
-	responseData struct {
-		status int
-		size   int
-	}
-
-	loggingResponseWriter struct {
-		http.ResponseWriter
-		responseData *responseData
-	}
-)
+type responseData struct {
+	status int
+	size   int
+}
 
 func newResponceData() *responseData {
 	return &responseData{
 		status: http.StatusOK,
 	}
+}
+
+func (rd *responseData) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("status", rd.status),
+		slog.Int("size", rd.size),
+	)
+}
+
+type requestData struct {
+	uri      string
+	method   string
+	duration time.Duration
 }
 
 func (rd *requestData) LogValue() slog.Value {
@@ -41,19 +38,9 @@ func (rd *requestData) LogValue() slog.Value {
 	)
 }
 
-func (rd *responseData) LogValue() slog.Value {
-	return slog.GroupValue(
-		slog.Int("status", rd.status),
-		slog.Int("size", rd.size),
-	)
-}
-
-func (r *loggingResponseWriter) Write(b []byte) (int, error) {
-	size, err := r.ResponseWriter.Write(b)
-
-	r.responseData.size += size
-
-	return size, err
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	responseData *responseData
 }
 
 func newLoggingResponseWriter(rw http.ResponseWriter, resData *responseData) *loggingResponseWriter {
@@ -61,6 +48,13 @@ func newLoggingResponseWriter(rw http.ResponseWriter, resData *responseData) *lo
 		ResponseWriter: rw,
 		responseData:   resData,
 	}
+}
+
+func (r *loggingResponseWriter) Write(b []byte) (int, error) {
+	size, err := r.ResponseWriter.Write(b)
+	r.responseData.size += size
+
+	return size, err
 }
 
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
@@ -75,6 +69,7 @@ func Logging(log *slog.Logger, next http.Handler) http.HandlerFunc {
 			uri:    req.URL.String(),
 			method: req.Method,
 		}
+
 		resData := newResponceData()
 
 		defer func() {
@@ -85,22 +80,5 @@ func Logging(log *slog.Logger, next http.Handler) http.HandlerFunc {
 		lmw := newLoggingResponseWriter(rw, resData)
 
 		next.ServeHTTP(lmw, req)
-	}
-}
-
-func Method(method string, next http.HandlerFunc) http.HandlerFunc {
-	return func(rw http.ResponseWriter, req *http.Request) {
-		if req.Method != method {
-			http.Error(rw, ErrOnlyPostRequest.Error(), http.StatusBadRequest)
-			return
-		}
-		next.ServeHTTP(rw, req)
-	}
-}
-
-func ContentType(ct string, next http.HandlerFunc) http.HandlerFunc {
-	return func(rw http.ResponseWriter, req *http.Request) {
-		rw.Header().Set("Content-Type", ct)
-		next.ServeHTTP(rw, req)
 	}
 }

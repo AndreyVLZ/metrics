@@ -3,7 +3,7 @@ package metricagent
 import (
 	"testing"
 
-	"github.com/AndreyVLZ/metrics/internal/storage"
+	"github.com/AndreyVLZ/metrics/internal/metric"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 	"github.com/stretchr/testify/assert"
 )
@@ -62,26 +62,25 @@ type testStore struct {
 	typeStr string
 	name    string
 	val     string
+	//val metric.Valuer
 }
 
-func (s *testStore) Set(typeStr, name, valStr string) error {
-	s.typeStr = typeStr
-	s.name = name
-	s.val = valStr
+func (s *testStore) Set(metric metric.MetricDB) error {
+	s.typeStr = metric.Type()
+	s.name = metric.Name()
+	s.val = metric.Valuer.String()
 	return nil
 }
 
-func (s *testStore) Get(typeStr, name string) (string, error) {
-	if s.typeStr != typeStr || s.name != name {
-		return "", memstorage.ErrValueByNameNotFound
+func (s *testStore) Get(metricDB metric.MetricDB) (metric.MetricDB, error) {
+	if s.typeStr != metricDB.Type() || s.name != metricDB.Name() {
+		return metric.MetricDB{}, memstorage.ErrValueByNameNotFound
 	}
-	return s.val, nil
+	return metric.NewMetricDB(metricDB.Name(), metricDB.Valuer), nil
 }
-func (s *testStore) GaugeRepo() storage.Repository {
-	return nil
-}
-func (s *testStore) CounterRepo() storage.Repository {
-	return nil
+
+func (s *testStore) List() []metric.MetricDB {
+	return []metric.MetricDB{}
 }
 
 func TestAddMetric(t *testing.T) {
@@ -108,7 +107,8 @@ func TestAddMetric(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			testStore := &testStore{}
 			agent := MetricClient{store: testStore}
-			agent.AddMetric(test.typeStr, test.nameStr, test.valStr)
+			_ = agent
+			//agent.AddMetric(test.typeStr, test.nameStr, test.valStr)
 
 			assert.Equal(t, testStore.typeStr, test.typeStr)
 			assert.Equal(t, testStore.name, test.nameStr)

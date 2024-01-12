@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/AndreyVLZ/metrics/cmd/server/middleware"
+	"github.com/AndreyVLZ/metrics/cmd/server/route/middleware"
 )
 
 type FuncOpt func(*metricServer)
@@ -30,16 +30,7 @@ func New(log *slog.Logger, handler http.Handler, opts ...FuncOpt) *metricServer 
 
 func (s *metricServer) Start() error {
 	s.log.Info("start server", slog.String("addr", s.addr))
-	/*
-		child := s.log.With(
-			slog.Group("program_info",
-				slog.Int("pid", os.Getpid()),
-			),
-		)
 
-		child.Info("test")
-		//log.Printf("start server %v\n", s.addr)
-	*/
 	return http.ListenAndServe(s.addr,
 		middleware.Logging(s.log, s.handler),
 	)

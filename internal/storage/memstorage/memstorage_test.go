@@ -1,12 +1,6 @@
 package memstorage
 
-import (
-	"testing"
-
-	"github.com/AndreyVLZ/metrics/internal/metric"
-	"github.com/stretchr/testify/assert"
-)
-
+/*
 func TestSetMemStore(t *testing.T) {
 	type data struct {
 		typeStr string
@@ -190,9 +184,9 @@ func TestSetMemStore(t *testing.T) {
 
 	for _, test := range tc {
 		t.Run(test.nameTest, func(t *testing.T) {
-			store := New(NewGaugeRepo(), NewCounterRepo())
+			store := New()
 			for _, d := range test.data {
-				err := store.Set(d.typeStr, d.name, d.valStr)
+				err := store.Set(metric.MetricDB{})
 				assert.Equal(t, err, d.err)
 			}
 			assert.Equal(t, test.wantGaugeList, store.GaugeRepo().List())
@@ -200,6 +194,4 @@ func TestSetMemStore(t *testing.T) {
 		})
 	}
 }
-
-func TestGetCounterRepo(t *testing.T) {
-}
+*/

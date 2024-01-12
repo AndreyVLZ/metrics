@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/AndreyVLZ/metrics/cmd/server/handlers"
 	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
 	"github.com/AndreyVLZ/metrics/cmd/server/route"
 
@@ -26,25 +25,24 @@ func main() {
 	}
 
 	// сборка хранилища
-	gaugeRepo := memstorage.NewGaugeRepo()
-	counterRepo := memstorage.NewCounterRepo()
-	store := memstorage.New(gaugeRepo, counterRepo)
+	store := memstorage.New()
 
 	// хендлеры
-	hand := handlers.NewChiHandle(store)
+	//hand := handlers.NewChiHandle(store)
+	//hand := handlers.NewMainHandle(store)
 
 	// объявление роутера ChiMux
-	router := route.NewChiMux()
+	//router := route.NewChiMux()
+	router := route.NewServeMux(store)
 
 	// установка хендлеров в роутер
-	handler := router.SetHandlers(hand)
 
 	//logger slog
 	//logger := sLog.New()
 	//logger zap
 	logger := zap.New(zap.DefaultConfig())
 	// сервер
-	srv := metricserver.New(logger, handler, opts...)
+	srv := metricserver.New(logger, router, opts...)
 
 	err := srv.Start()
 	if err != nil {

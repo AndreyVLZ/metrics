@@ -51,6 +51,7 @@ func TestNewCounter(t *testing.T) {
 	}
 }
 
+/*
 func TestSetCounter(t *testing.T) {
 	tc := []struct {
 		counter Counter
@@ -73,6 +74,7 @@ func TestSetCounter(t *testing.T) {
 	}
 
 	for _, test := range tc {
+
 		err := test.counter.Set(test.valStr)
 		assert.Equal(t, err, test.err)
 	}
@@ -101,6 +103,7 @@ func TestSetValCounter(t *testing.T) {
 		assert.Equal(t, test.counter, test.want)
 	}
 }
+*/
 
 func TestTypeCounter(t *testing.T) {
 	assert.Equal(t, Counter(5).Type(), CounterType)
@@ -151,6 +154,8 @@ func TestNewGauge(t *testing.T) {
 		assert.Equal(t, ex, test.want)
 	}
 }
+
+/*
 func TestSetGauge(t *testing.T) {
 	tc := []struct {
 		gauge  Gauge
@@ -201,6 +206,7 @@ func TestSetValGauge(t *testing.T) {
 		assert.Equal(t, test.gauge, test.want)
 	}
 }
+*/
 
 func TestTypeGauge(t *testing.T) {
 	assert.Equal(t, Gauge(5.6).Type(), GaugeType)

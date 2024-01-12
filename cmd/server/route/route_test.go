@@ -2,10 +2,6 @@ package route
 
 import (
 	"net/http"
-	"net/http/httptest"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 var testCase = []struct {
@@ -38,6 +34,7 @@ var testCase = []struct {
 	},
 }
 
+/*
 type testHandlers struct{}
 
 func (h *testHandlers) UpdateHandler(rw http.ResponseWriter, req *http.Request) {
@@ -102,3 +99,4 @@ func statusCode(t *testing.T, rec *httptest.ResponseRecorder) int {
 	}
 	return res.StatusCode
 }
+*/

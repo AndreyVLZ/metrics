@@ -15,7 +15,7 @@ type GetURLPath struct {
 	name    string
 }
 
-func NewGetURLPath(arr []string) *GetURLPath {
+func NewGetURLPath(arr ...string) *GetURLPath {
 	getURLPath := new(GetURLPath)
 	for i := range arr {
 		getURLPath.set(i, arr[i])
@@ -49,7 +49,7 @@ type UpdateURLPath struct {
 	value string
 }
 
-func NewUpdateURLPath(arr []string) *UpdateURLPath {
+func NewUpdateURLPath(arr ...string) *UpdateURLPath {
 	updateURLPath := &UpdateURLPath{GetURLPath: new(GetURLPath)}
 	for i := range arr {
 		updateURLPath.set(i, arr[i])

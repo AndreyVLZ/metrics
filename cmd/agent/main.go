@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/AndreyVLZ/metrics/cmd/agent/metricagent"
+	"github.com/AndreyVLZ/metrics/internal/metric"
 )
 
 func main() {
@@ -40,7 +41,7 @@ func main() {
 
 	client := metricagent.New(opts...)
 
-	err := client.AddMetric("gauge", "meMetric", "123")
+	err := client.AddMetric("RandomValue", metric.Gauge(0))
 	if err != nil {
 		log.Panicf("err: %v\n", err)
 	}

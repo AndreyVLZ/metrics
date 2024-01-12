@@ -1,13 +1,17 @@
 package metricagent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/cmd/agent/stats"
+	"github.com/AndreyVLZ/metrics/cmd/server/route/mainhandler"
 	"github.com/AndreyVLZ/metrics/internal/metric"
 	"github.com/AndreyVLZ/metrics/internal/storage"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
@@ -51,7 +55,7 @@ type MetricClient struct {
 func New(opts ...FuncOpt) *MetricClient {
 	agent := &MetricClient{
 		stats:          *stats.NewStats(),
-		store:          memstorage.New(memstorage.NewGaugeRepo(), memstorage.NewCounterRepo()),
+		store:          memstorage.New(),
 		addr:           AddressDefault,
 		pollInterval:   PollIntervalDefault,
 		reportInterval: ReportIntervalDefault,
@@ -66,8 +70,9 @@ func New(opts ...FuncOpt) *MetricClient {
 }
 
 // AddMetric сохраняет в репозиторий значение произвольной метрики
-func (c *MetricClient) AddMetric(typeStr string, name string, valStr string) error {
-	return c.store.Set(typeStr, name, valStr)
+func (c *MetricClient) AddMetric(name string, val metric.Valuer) error {
+	metricDB := metric.NewMetricDB(name, val)
+	return c.store.Set(metricDB)
 }
 
 // Start запускет агент
@@ -85,16 +90,33 @@ func (c *MetricClient) Start() error {
 	return nil
 }
 
+func (c *MetricClient) randomValueUpdate() error {
+	return c.store.Set(metric.NewMetricDB("RandomValue", metric.Gauge(rand.Float64())))
+}
+
 // UpdateMetrics Обновление всех метрик из пакета runtime и сохраниение в хранилище
 func (c *MetricClient) UpdateMetrics(wg *sync.WaitGroup) {
 	var err error
 
 	for err == nil {
+		err = c.updateAllMetrics()
+		//err = c.stats.ReadToStore(c.store)
+		//err = c.randomValueUpdate()
 		time.Sleep(time.Duration(c.pollInterval) * time.Second)
-		err = c.stats.ReadToStore(c.store)
 	}
 	wg.Done()
 	log.Printf("err> %v\n", err)
+}
+
+func (c *MetricClient) updateAllMetrics() error {
+	if err := c.stats.ReadToStore(c.store); err != nil {
+		return err
+	}
+	if err := c.randomValueUpdate(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // SendMetrics Чтение и отправка всех сохраненых метрик
@@ -103,27 +125,54 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 
 	for err == nil {
 		time.Sleep(time.Duration(c.reportInterval) * time.Second)
-		for name, val := range c.store.GaugeRepo().List() {
-			err = c.SendMetric(metric.GaugeType.String(), name, val)
-			if err != nil {
-				log.Printf("err> %v\n", err)
-			}
-		}
-		for name, val := range c.store.CounterRepo().List() {
-			err = c.SendMetric(metric.CounterType.String(), name, val)
+		metrics := c.store.List()
+		for i := range metrics {
+			err = c.SendMetricPost(metrics[i])
 			if err != nil {
 				log.Printf("err> %v\n", err)
 			}
 		}
 	}
+
 	wg.Done()
 }
 
+func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
+	url := fmt.Sprintf("http://%s/update/", c.addr)
+
+	metricJSON, err := mainhandler.NewMetricJSONFromMetricDB(metric)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(metricJSON)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
+	if err != nil {
+		log.Printf("err build request %v\n", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		log.Printf("err to send request: %s", err)
+	} else {
+		if err = resp.Body.Close(); err != nil {
+			log.Printf("err body close: %s", err)
+		}
+	}
+
+	return nil
+}
+
 // SendMetric Оправка метрики агентом на сервер по адресу
-func (c *MetricClient) SendMetric(typeStr, name, valStr string) error {
+func (c *MetricClient) SendMetric(metric metric.MetricDB) error {
 	url := fmt.Sprintf(
 		"http://%s/update/%s/%s/%s",
-		c.addr, typeStr, name, valStr)
+		c.addr, metric.Type(), metric.Name(), metric.Valuer.String())
 
 	res, err := c.client.Post(url, "text/plain", http.NoBody)
 	if err != nil {
