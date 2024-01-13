@@ -24,13 +24,17 @@ func New(mh handlers.Handlers) http.Handler {
 func (s *serveMux) setHandlers(mh handlers.Handlers) {
 	s.mux.Handle("/",
 		middleware.Get(
-			http.HandlerFunc(mh.ListHandler),
+			middleware.GzipMiddleware(
+				http.HandlerFunc(mh.ListHandler),
+			),
 		),
 	)
 
 	s.mux.Handle("/update/",
 		middleware.Post(
-			mh.PostUpdateHandler(),
+			middleware.GzipMiddleware(
+				mh.PostUpdateHandler().ServeHTTP,
+			),
 		),
 	)
 
@@ -40,7 +44,9 @@ func (s *serveMux) setHandlers(mh handlers.Handlers) {
 				mh.GetValueHandler(),
 			),
 			middleware.Post(
-				mh.PostValueHandler(),
+				middleware.GzipMiddleware(
+					mh.PostValueHandler().ServeHTTP,
+				),
 			),
 		),
 	)
