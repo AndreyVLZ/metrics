@@ -14,9 +14,6 @@ var (
 )
 
 type Repository interface {
-	//Set(name, valStr string) error
-	//Get(string) (string, error)
-	//List() map[string]string
 	Set(string, metric.Valuer) error
 	Get(string) (metric.Valuer, error)
 	List() map[string]metric.Valuer

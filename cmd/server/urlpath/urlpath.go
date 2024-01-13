@@ -9,6 +9,7 @@ const (
 )
 
 var ErrNoCorrectURLPath error = errors.New("no correct url path")
+var ErrEmptyNameField error = errors.New("empty name field")
 
 type GetURLPath struct {
 	typeStr string
@@ -28,7 +29,12 @@ func (urlPath *GetURLPath) Type() string { return urlPath.typeStr }
 func (urlPath *GetURLPath) Name() string { return urlPath.name }
 
 func (urlPath *GetURLPath) Validate() error {
-	if urlPath.name == "" || urlPath.typeStr == "" {
+	if urlPath.name == "" {
+		return ErrEmptyNameField
+	}
+
+	if urlPath.typeStr == "" {
+
 		return ErrNoCorrectURLPath
 	}
 
@@ -61,7 +67,11 @@ func NewUpdateURLPath(arr ...string) *UpdateURLPath {
 func (urlPath *UpdateURLPath) Value() string { return urlPath.value }
 
 func (urlPath *UpdateURLPath) Validate() error {
-	if urlPath.value == "" || urlPath.GetURLPath.Validate() != nil {
+	if err := urlPath.GetURLPath.Validate(); err != nil {
+		return err
+	}
+
+	if urlPath.value == "" {
 		return ErrNoCorrectURLPath
 	}
 

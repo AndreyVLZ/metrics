@@ -3,11 +3,11 @@ package mainhandler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"html/template"
 	"io"
 	"net/http"
 
+	"github.com/AndreyVLZ/metrics/cmd/server/urlpath"
 	"github.com/AndreyVLZ/metrics/internal/metric"
 	"github.com/AndreyVLZ/metrics/internal/storage"
 )
@@ -100,8 +100,10 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
 		rw := responseWriter{w}
 		metricDB, err := mh.EmbedingHandlers.GetMetricDBFromRequest(req)
-		fmt.Println(err)
 		if err != nil {
+			if err.Error() == urlpath.ErrEmptyNameField.Error() {
+				return http.StatusNotFound, err
+			}
 			return http.StatusBadRequest, err
 		}
 
@@ -200,6 +202,9 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (int, error) {
 	metricDB, err := mh.EmbedingHandlers.GetUpdateMetricDBFromRequest(req)
 	if err != nil {
+		if err.Error() == urlpath.ErrEmptyNameField.Error() {
+			return http.StatusNotFound, err
+		}
 		return http.StatusBadRequest, err
 	}
 

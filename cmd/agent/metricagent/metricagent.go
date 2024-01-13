@@ -69,11 +69,13 @@ func New(opts ...FuncOpt) *MetricClient {
 	return agent
 }
 
+/*
 // AddMetric сохраняет в репозиторий значение произвольной метрики
 func (c *MetricClient) AddMetric(name string, val metric.Valuer) error {
 	metricDB := metric.NewMetricDB(name, val)
 	return c.store.Set(metricDB)
 }
+*/
 
 // Start запускет агент
 func (c *MetricClient) Start() error {
@@ -90,21 +92,16 @@ func (c *MetricClient) Start() error {
 	return nil
 }
 
-func (c *MetricClient) randomValueUpdate() error {
-	return c.store.Set(metric.NewMetricDB("RandomValue", metric.Gauge(rand.Float64())))
-}
-
 // UpdateMetrics Обновление всех метрик из пакета runtime и сохраниение в хранилище
 func (c *MetricClient) UpdateMetrics(wg *sync.WaitGroup) {
 	var err error
 
 	for err == nil {
 		err = c.updateAllMetrics()
-		//err = c.stats.ReadToStore(c.store)
-		//err = c.randomValueUpdate()
 		time.Sleep(time.Duration(c.pollInterval) * time.Second)
 	}
 	wg.Done()
+
 	log.Printf("err> %v\n", err)
 }
 
@@ -117,6 +114,10 @@ func (c *MetricClient) updateAllMetrics() error {
 	}
 
 	return nil
+}
+
+func (c *MetricClient) randomValueUpdate() error {
+	return c.store.Set(metric.NewMetricDB("RandomValue", metric.Gauge(rand.Float64())))
 }
 
 // SendMetrics Чтение и отправка всех сохраненых метрик

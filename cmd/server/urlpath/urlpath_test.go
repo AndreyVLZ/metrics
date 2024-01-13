@@ -96,7 +96,7 @@ func TestGetURLPathValidate(t *testing.T) {
 				typeStr: "co",
 				name:    "",
 			},
-			err: ErrNoCorrectURLPath,
+			err: ErrEmptyNameField,
 		},
 		{
 			name: "negative #2",

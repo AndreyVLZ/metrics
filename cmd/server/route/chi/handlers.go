@@ -32,6 +32,7 @@ func (h *chiHandle) GetMetricDBFromRequest(req *http.Request) (metric.MetricDB, 
 		"",
 	)
 }
+
 func (h *chiHandle) GetUpdateMetricDBFromRequest(req *http.Request) (metric.MetricDB, error) {
 	updateURLPath := urlpath.NewUpdateURLPath(
 		chi.URLParam(req, TypeChiConst),
