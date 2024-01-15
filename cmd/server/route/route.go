@@ -1,14 +1,6 @@
 package route
 
-import (
-	"net/http"
-
-	"github.com/AndreyVLZ/metrics/cmd/server/route/chi"
-	"github.com/AndreyVLZ/metrics/cmd/server/route/mainhandler"
-	"github.com/AndreyVLZ/metrics/cmd/server/route/servemux"
-	"github.com/AndreyVLZ/metrics/internal/storage"
-)
-
+/*
 func NewServeMux(store storage.Storage) http.Handler {
 	return servemux.New(
 		mainhandler.NewMainHandlers(
@@ -26,3 +18,4 @@ func NewChi(store storage.Storage) http.Handler {
 		),
 	)
 }
+*/

@@ -69,14 +69,6 @@ func New(opts ...FuncOpt) *MetricClient {
 	return agent
 }
 
-/*
-// AddMetric сохраняет в репозиторий значение произвольной метрики
-func (c *MetricClient) AddMetric(name string, val metric.Valuer) error {
-	metricDB := metric.NewMetricDB(name, val)
-	return c.store.Set(metricDB)
-}
-*/
-
 // Start запускет агент
 func (c *MetricClient) Start() error {
 	log.Printf("start agent: %s %v %v\n", c.addr, c.pollInterval, c.reportInterval)

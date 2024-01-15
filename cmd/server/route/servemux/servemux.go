@@ -4,20 +4,28 @@ import (
 	"net/http"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/route/handlers"
+	"github.com/AndreyVLZ/metrics/cmd/server/route/mainhandler"
 	"github.com/AndreyVLZ/metrics/cmd/server/route/middleware"
+	"github.com/AndreyVLZ/metrics/internal/storage"
 )
 
 type serveMux struct {
 	mux *http.ServeMux
 }
 
-func New(mh handlers.Handlers) http.Handler {
-	s := &serveMux{
+func New() *serveMux {
+	return &serveMux{
 		mux: http.NewServeMux(),
 	}
+}
 
-	s.setHandlers(mh)
-
+func (s *serveMux) SetStore(store storage.Storage) http.Handler {
+	s.setHandlers(
+		mainhandler.NewMainHandlers(
+			store,
+			NewServeMuxHandle(),
+		),
+	)
 	return s.mux
 }
 

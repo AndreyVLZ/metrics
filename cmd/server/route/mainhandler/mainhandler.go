@@ -57,12 +57,7 @@ func (rw *responseWriter) WriteString(dataStr string) error {
 }
 
 func (rw *responseWriter) WriteAsJSON(newMetricDB metric.MetricDB) error {
-	metricJSON, err := NewMetricJSONFromMetricDB(newMetricDB)
-	if err != nil {
-		return err
-	}
-
-	return json.NewEncoder(rw.w).Encode(metricJSON)
+	return json.NewEncoder(rw.w).Encode(newMetricDB)
 }
 
 type funcHandle func(http.ResponseWriter, *http.Request) (int, error)

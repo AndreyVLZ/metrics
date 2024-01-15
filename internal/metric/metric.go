@@ -1,6 +1,7 @@
 package metric
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -28,9 +29,68 @@ type Valuer interface {
 	fmt.Stringer
 }
 
+var _ json.Marshaler = MetricDB{}
+
 type MetricDB struct {
 	name string
 	Valuer
+}
+
+type metricJSON struct {
+	ID    string   `json:"id"`              // имя метрики
+	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
+	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
+	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+}
+
+func (m MetricDB) MarshalJSON() ([]byte, error) {
+	type metricAlias MetricDB
+	metricJSON := metricJSON{
+		ID:    m.Name(),
+		MType: m.Type(),
+	}
+
+	if m.Type() == CounterType.String() {
+		val := new(int64)
+		err := m.ReadTo(val)
+		if err != nil {
+			return []byte{}, err
+		}
+		metricJSON.Delta = val
+	}
+
+	if m.Type() == GaugeType.String() {
+		val := new(float64)
+		err := m.ReadTo(val)
+		if err != nil {
+			return []byte{}, err
+		}
+		metricJSON.Value = val
+	}
+
+	return json.Marshal(metricJSON)
+}
+
+func (m *MetricDB) UnmarshalJSON(data []byte) error {
+	type metricAlias MetricDB
+	metricJSON := metricJSON{}
+
+	err := json.Unmarshal(data, &metricJSON)
+	if err != nil {
+		return err
+	}
+
+	m.name = metricJSON.ID
+	if metricJSON.MType == CounterType.String() && metricJSON.Delta != nil {
+		cVal := Counter(*metricJSON.Delta)
+		m.Valuer = cVal
+	}
+	if metricJSON.MType == GaugeType.String() && metricJSON.Value != nil {
+		fVal := Gauge(*metricJSON.Value)
+		m.Valuer = fVal
+	}
+
+	return nil
 }
 
 func NewMetricDB(name string, val Valuer) MetricDB {
