@@ -2,14 +2,12 @@ package main
 
 import (
 	"flag"
-	"log"
 	"os"
 	"strconv"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
 	"github.com/AndreyVLZ/metrics/cmd/server/route/servemux"
 
-	//sLog "github.com/AndreyVLZ/metrics/internal/log/slog"
 	"github.com/AndreyVLZ/metrics/internal/log/zap"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 )
@@ -58,14 +56,14 @@ func main() {
 
 	// объявление роутера
 	route := servemux.New()
-	//router := route.NewServeMux(wrapStore)
 
+	// объявление логера
 	logger := zap.New(zap.DefaultConfig())
 
 	//сервер
 	srv, err := metricserver.New(logger, route, store, opts...)
 	if err != nil {
-		log.Printf("!Err %n", err)
+		logger.Error("Err server build %v\n", err)
 	}
 
 	srv.Start()

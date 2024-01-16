@@ -8,12 +8,6 @@ import (
 	"strconv"
 )
 
-/*
-type Namer interface {
-	Name() string
-}
-*/
-
 type Typer interface {
 	Type() string
 }
@@ -23,7 +17,6 @@ type ToReader interface {
 }
 
 type Valuer interface {
-	//Namer
 	Typer
 	ToReader
 	fmt.Stringer
@@ -100,49 +93,6 @@ func NewMetricDB(name string, val Valuer) MetricDB {
 	}
 }
 
-/*
-func NewGetMetrciDB(typeStr string, name string) (MetricDB, error) {
-	var (
-		val Valuer
-	)
-
-	switch typeStr {
-	case CounterType.String():
-		val = new(Counter)
-	case GaugeType.String():
-		val = new(Gauge)
-	default:
-		return MetricDB{}, errors.New("xz")
-	}
-
-	return NewMetricDB(name, val), nil
-}
-
-func NewUpdateMetricDB(typeStr string, name string, valStr string) (MetricDB, error) {
-	var (
-		val Valuer
-		err error
-	)
-
-	switch typeStr {
-	case CounterType.String():
-		val, err = NewCounter(valStr)
-		if err != nil {
-			return MetricDB{}, err
-		}
-	case GaugeType.String():
-		val, err = NewGauge(valStr)
-		if err != nil {
-			return MetricDB{}, err
-		}
-	default:
-		return MetricDB{}, errors.New("xz")
-	}
-
-	return NewMetricDB(name, val), nil
-}
-*/
-
 func (m MetricDB) Name() string { return m.name }
 
 var ErrStringIsNotValid error = errors.New("string is not valid")
@@ -185,33 +135,6 @@ func NewCounter(valStr string) (*Counter, error) {
 	return &c, nil
 }
 
-/*
-func NewCounter(valStr string) (Counter, error) {
-	c := Counter(0)
-	err := c.Set(valStr)
-
-	return c, err
-}
-*/
-
-// Set Установка нового значения из строки valStr для Counter
-// Возвращает ошибку если valStr не валиден
-/*
-func (c *Counter) Set(valStr string) error {
-	newInt, err := strconv.ParseInt(valStr, 10, 64)
-	if err != nil {
-		return ErrStringIsNotValid
-	}
-
-	c.SetVal(Counter(newInt))
-
-	return nil
-}
-*/
-
-// SetVal Установка нового значения newVal для текущего Counter
-//func (c *Counter) SetVal(newVal Counter) { *c = *c + newVal }
-
 // Type Возвращает константу CounterType типа metricType
 func (c Counter) Type() string { return CounterType.String() }
 
@@ -242,33 +165,6 @@ func NewGauge(valStr string) (*Gauge, error) {
 
 	return &g, nil
 }
-
-/*
-func NewGauge(valStr string) (Gauge, error) {
-	g := Gauge(0)
-	err := g.Set(valStr)
-
-	return g, err
-}
-*/
-
-// Set Установка нового значения из строки valStr для Gauge
-// Возвращает ошибку если valStr не валиден
-/*
-func (g *Gauge) Set(valStr string) error {
-	newGauge, err := strconv.ParseFloat(valStr, 64)
-	if err != nil {
-		return ErrStringIsNotValid
-	}
-
-	g.SetVal(Gauge(newGauge))
-
-	return nil
-}
-*/
-
-// SetVal Установка нового значения newVal для текущего Gauge
-//func (g *Gauge) SetVal(newVal Gauge) { *g = newVal }
 
 // Type Возвращает константу GaugeType типа metricType
 func (g Gauge) Type() string { return GaugeType.String() }

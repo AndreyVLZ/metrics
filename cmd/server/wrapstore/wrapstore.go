@@ -1,7 +1,6 @@
 package wrapstore
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/producer"
@@ -22,10 +21,9 @@ func NewWrapStore(store storage.Storage, produce *producer.Producer) WrapStore {
 }
 
 func (ws WrapStore) Set(m metric.MetricDB) error {
-	fmt.Println("SET BY WrapStore ")
 	err := ws.producer.WriteMetric(&m)
 	if err != nil {
-		log.Printf("ERR %v\n", err)
+		log.Printf("err set wrap store %v\n", err)
 	}
 
 	return ws.Storage.Set(m)

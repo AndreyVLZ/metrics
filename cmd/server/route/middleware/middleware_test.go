@@ -49,7 +49,6 @@ func TestMethod(t *testing.T) {
 
 			req := httptest.NewRequest(test.m1, "/update/", nil)
 			rec := httptest.NewRecorder()
-			//nextHandler(rec, req)
 
 			methodHandler := Method(test.m2, nextHandler)
 			methodHandler.ServeHTTP(rec, req)

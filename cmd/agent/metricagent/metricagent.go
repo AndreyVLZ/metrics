@@ -123,6 +123,7 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 			err = c.SendMetricPost(metrics[i])
 			if err != nil {
 				log.Printf("err> %v\n", err)
+				return
 			}
 		}
 	}
@@ -145,17 +146,18 @@ func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
-		log.Printf("err build request %v\n", err)
+		return fmt.Errorf("err build request: %v", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Printf("err to send request: %s", err)
-	} else {
-		if err = resp.Body.Close(); err != nil {
-			log.Printf("err body close: %s", err)
-		}
+		return fmt.Errorf("err to send request: %s", err)
+	}
+
+	if err = resp.Body.Close(); err != nil {
+		return fmt.Errorf("err body close: %s", err)
 	}
 
 	return nil

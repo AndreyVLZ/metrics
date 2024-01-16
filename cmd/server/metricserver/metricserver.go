@@ -2,6 +2,7 @@ package metricserver
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net/http"
@@ -97,15 +98,23 @@ func (s *metricServer) Start() {
 	go s.savedByContex(ctxMain)
 
 	// ловим сигналы выхода
-	s.signalProcessing(os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	// блокируем
+	<-ctx.Done()
+	log.Println("signal [Ctrl+C]")
 
 	// останавливаем сервер с конкетстом
-	s.stop(ctxMain)
+	s.log.Info("server stopped....")
+	if err := s.stop(ctxMain); err != nil {
+		s.log.Error("err stopped server:", err)
+	}
+
+	s.log.Info("server stop OK")
+	os.Exit(0)
 }
 
-func (s *metricServer) stop(ctxMain context.Context) {
-	s.log.Info("server stopped....")
-
+func (s *metricServer) stop(ctxMain context.Context) error {
 	// контекс для отмены на 10сек
 	timeoutCtx, cancel := context.WithTimeout(ctxMain, 10*time.Second)
 	defer cancel()
@@ -117,14 +126,12 @@ func (s *metricServer) stop(ctxMain context.Context) {
 
 	switch timeoutCtx.Err() {
 	case context.Canceled:
-		s.log.Info("server stop OK")
+		return nil
 	case context.DeadlineExceeded:
-		log.Println("deadLine")
+		return errors.New("deadLine")
 	default:
-		log.Printf("err stopped %v\n", timeoutCtx.Err())
+		return timeoutCtx.Err()
 	}
-
-	os.Exit(0)
 }
 
 // Востановить метрики из файла
@@ -150,18 +157,11 @@ func (s *metricServer) savedByContex(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			s.saved()
+			if err := s.saved(); err != nil {
+				log.Printf("Err save metrics %v\n", err)
+			}
 		}
 	}
-}
-
-func (s *metricServer) signalProcessing(signals ...os.Signal) {
-	ctx, stop := signal.NotifyContext(context.Background(), signals...)
-	defer stop()
-
-	// блокируем
-	<-ctx.Done()
-	log.Println("signal [Ctrl+C]")
 }
 
 func (s *metricServer) registerOnShutdown(cancel func()) {
@@ -170,7 +170,9 @@ func (s *metricServer) registerOnShutdown(cancel func()) {
 
 func (s *metricServer) shutdownFunc(cancelFn func()) func() {
 	return func() {
-		s.saved()
+		if err := s.saved(); err != nil {
+			log.Printf("Err save metrics %v\n", err)
+		}
 
 		if err := s.consumer.Close(); err != nil {
 			log.Printf("Err close consumer %v\n", err)
@@ -183,23 +185,26 @@ func (s *metricServer) shutdownFunc(cancelFn func()) func() {
 	}
 }
 
-func (s *metricServer) saved() {
+func (s *metricServer) saved() error {
 	err := s.producer.Trunc()
 	if err != nil {
-		log.Printf("Err Save from file %v\n", err)
+		return err
 	}
+
 	arr := s.store.List()
 	for _, m := range arr {
 		err := s.producer.WriteMetric(&m)
 		if err != nil {
-			log.Printf("Err Save from file %v\n", err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 func (s *metricServer) shutdown(timeoutCtx context.Context) {
 	if err := s.server.Shutdown(timeoutCtx); err != nil {
-		log.Println(err)
+		log.Printf("err shutdown %v\n", err)
 	}
 }
 
@@ -224,7 +229,6 @@ func SetStoreInt(interval int) FuncOpt {
 func SetStorePath(path string) FuncOpt {
 	return func(s *metricServer) {
 		s.storePath = path
-		//s.storePath = "myDir/metrics-db.json"
 	}
 }
 

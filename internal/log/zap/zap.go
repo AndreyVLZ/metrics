@@ -2,6 +2,7 @@ package zap
 
 import (
 	"log/slog"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
@@ -11,7 +12,11 @@ import (
 func DefaultConfig() zap.Config {
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "timestamp"
-	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	//encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeTime = zapcore.TimeEncoder(func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(t.Format("02.01.06 15:04:05"))
+	})
+
 	config := zap.Config{
 		Level:             zap.NewAtomicLevelAt(zap.InfoLevel),
 		Development:       false,

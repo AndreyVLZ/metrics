@@ -115,5 +115,4 @@ func TestGetURLPathValidate(t *testing.T) {
 			assert.Equal(t, test.err, urlPath.Validate())
 		})
 	}
-
 }

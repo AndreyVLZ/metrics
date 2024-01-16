@@ -82,39 +82,3 @@ func (s *testStore) Get(metricDB metric.MetricDB) (metric.MetricDB, error) {
 func (s *testStore) List() []metric.MetricDB {
 	return []metric.MetricDB{}
 }
-
-/*
-func TestAddMetric(t *testing.T) {
-	testCase := []struct {
-		name    string
-		nameStr string
-		typeStr string
-		valStr  string
-	}{
-		{
-			name:    "positive #1",
-			nameStr: "nameStr",
-			typeStr: "typeStr",
-			valStr:  "valStr",
-		},
-		{
-			name:    "negative #1",
-			nameStr: "nameStr",
-			typeStr: "typeStr",
-			valStr:  "valStr",
-		},
-	}
-	for _, test := range testCase {
-		t.Run(test.name, func(t *testing.T) {
-			testStore := &testStore{}
-			agent := MetricClient{store: testStore}
-			_ = agent
-			//agent.AddMetric(test.typeStr, test.nameStr, test.valStr)
-
-			assert.Equal(t, testStore.typeStr, test.typeStr)
-			assert.Equal(t, testStore.name, test.nameStr)
-			assert.Equal(t, testStore.val, test.valStr)
-		})
-	}
-}
-*/

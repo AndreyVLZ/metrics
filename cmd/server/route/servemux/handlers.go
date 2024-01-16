@@ -8,8 +8,6 @@ import (
 	"github.com/AndreyVLZ/metrics/internal/metric"
 )
 
-//var _ mainhandler.EmbedingHandlers = &serveMuxHandle{}
-
 type serveMuxHandle struct{}
 
 func NewServeMuxHandle() *serveMuxHandle {

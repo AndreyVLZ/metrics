@@ -34,7 +34,7 @@ func (c *Consumer) ReadMetric() ([]metric.MetricDB, error) {
 		var metricDB metric.MetricDB
 		err := json.Unmarshal(data, &metricDB)
 		if err != nil {
-			return arr, err
+			return nil, err
 		}
 
 		arr = append(arr, metricDB)
