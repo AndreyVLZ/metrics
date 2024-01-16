@@ -123,7 +123,6 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 			err = c.SendMetricPost(metrics[i])
 			if err != nil {
 				log.Printf("err> %v\n", err)
-				return
 			}
 		}
 	}
