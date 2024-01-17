@@ -40,12 +40,7 @@ func main() {
 
 	client := metricagent.New(opts...)
 
-	err := client.AddMetric("gauge", "meMetric", "123")
-	if err != nil {
-		log.Panicf("err: %v\n", err)
-	}
-
-	err = client.Start()
+	err := client.Start()
 	if err != nil {
 		log.Panicf("err: %v\n", err)
 	}

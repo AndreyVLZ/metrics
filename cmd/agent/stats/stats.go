@@ -123,16 +123,19 @@ func (s *Stats) Total() m.Counter {
 
 // ReadToStore Получение и сохранение всех поддерживаемых метрик в хранилище s
 func (s *Stats) ReadToStore(store storage.Storage) error {
-	gRepo := store.GaugeRepo()
 	supportName := metricConst(0).supportName()
 	for i := range supportName {
-		if err := gRepo.Set(supportName[i], s.Read(metricConst(i)).String()); err != nil {
+		if err := store.Set(
+			m.NewMetricDB(
+				supportName[i],
+				s.Read(metricConst(i)),
+			),
+		); err != nil {
 			return err
 		}
 	}
 
-	cRepo := store.CounterRepo()
-	if err := cRepo.Set("TOTAL", s.Total().String()); err != nil {
+	if err := store.Set(m.NewMetricDB("PollCount", s.Total())); err != nil {
 		return err
 	}
 

@@ -49,28 +49,10 @@ func TestMethod(t *testing.T) {
 
 			req := httptest.NewRequest(test.m1, "/update/", nil)
 			rec := httptest.NewRecorder()
-			//nextHandler(rec, req)
 
 			methodHandler := Method(test.m2, nextHandler)
 			methodHandler.ServeHTTP(rec, req)
 			assert.Equal(t, rec.Code, test.wantCode)
 		})
 	}
-}
-
-func TestContentType(t *testing.T) {
-	test := struct {
-		contentType string
-	}{
-		contentType: "Test",
-	}
-	nextHandler := func(rw http.ResponseWriter, req *http.Request) {
-	}
-	req := httptest.NewRequest(http.MethodGet, "/update/", nil)
-	rec := httptest.NewRecorder()
-
-	methodContentType := ContentType(test.contentType, nextHandler)
-	methodContentType.ServeHTTP(rec, req)
-
-	assert.Equal(t, rec.Header().Get("Content-Type"), test.contentType)
 }

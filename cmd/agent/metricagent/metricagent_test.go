@@ -3,7 +3,7 @@ package metricagent
 import (
 	"testing"
 
-	"github.com/AndreyVLZ/metrics/internal/storage"
+	"github.com/AndreyVLZ/metrics/internal/metric"
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 	"github.com/stretchr/testify/assert"
 )
@@ -61,58 +61,24 @@ func TestNew(t *testing.T) {
 type testStore struct {
 	typeStr string
 	name    string
-	val     string
+	//val     string
+	val metric.Valuer
 }
 
-func (s *testStore) Set(typeStr, name, valStr string) error {
-	s.typeStr = typeStr
-	s.name = name
-	s.val = valStr
+func (s *testStore) Set(metric metric.MetricDB) error {
+	s.typeStr = metric.Type()
+	s.name = metric.Name()
+	s.val = metric.Valuer
 	return nil
 }
 
-func (s *testStore) Get(typeStr, name string) (string, error) {
-	if s.typeStr != typeStr || s.name != name {
-		return "", memstorage.ErrValueByNameNotFound
+func (s *testStore) Get(metricDB metric.MetricDB) (metric.MetricDB, error) {
+	if s.typeStr != metricDB.Type() || s.name != metricDB.Name() {
+		return metric.MetricDB{}, memstorage.ErrValueByNameNotFound
 	}
-	return s.val, nil
-}
-func (s *testStore) GaugeRepo() storage.Repository {
-	return nil
-}
-func (s *testStore) CounterRepo() storage.Repository {
-	return nil
+	return metric.NewMetricDB(metricDB.Name(), metricDB.Valuer), nil
 }
 
-func TestAddMetric(t *testing.T) {
-	testCase := []struct {
-		name    string
-		nameStr string
-		typeStr string
-		valStr  string
-	}{
-		{
-			name:    "positive #1",
-			nameStr: "nameStr",
-			typeStr: "typeStr",
-			valStr:  "valStr",
-		},
-		{
-			name:    "negative #1",
-			nameStr: "nameStr",
-			typeStr: "typeStr",
-			valStr:  "valStr",
-		},
-	}
-	for _, test := range testCase {
-		t.Run(test.name, func(t *testing.T) {
-			testStore := &testStore{}
-			agent := MetricClient{store: testStore}
-			agent.AddMetric(test.typeStr, test.nameStr, test.valStr)
-
-			assert.Equal(t, testStore.typeStr, test.typeStr)
-			assert.Equal(t, testStore.name, test.nameStr)
-			assert.Equal(t, testStore.val, test.valStr)
-		})
-	}
+func (s *testStore) List() []metric.MetricDB {
+	return []metric.MetricDB{}
 }

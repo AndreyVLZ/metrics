@@ -1,14 +1,9 @@
 package storage
 
-type Storage interface {
-	Set(typeStr, name, valStr string) error
-	Get(typeStr, name string) (string, error)
-	GaugeRepo() Repository
-	CounterRepo() Repository
-}
+import "github.com/AndreyVLZ/metrics/internal/metric"
 
-type Repository interface {
-	Set(name, valStr string) error
-	Get(string) (string, error)
-	List() map[string]string
+type Storage interface {
+	Get(metric.MetricDB) (metric.MetricDB, error)
+	Set(metric.MetricDB) error
+	List() []metric.MetricDB
 }

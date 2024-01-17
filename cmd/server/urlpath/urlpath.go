@@ -9,13 +9,14 @@ const (
 )
 
 var ErrNoCorrectURLPath error = errors.New("no correct url path")
+var ErrEmptyNameField error = errors.New("empty name field")
 
 type GetURLPath struct {
 	typeStr string
 	name    string
 }
 
-func NewGetURLPath(arr []string) *GetURLPath {
+func NewGetURLPath(arr ...string) *GetURLPath {
 	getURLPath := new(GetURLPath)
 	for i := range arr {
 		getURLPath.set(i, arr[i])
@@ -28,7 +29,12 @@ func (urlPath *GetURLPath) Type() string { return urlPath.typeStr }
 func (urlPath *GetURLPath) Name() string { return urlPath.name }
 
 func (urlPath *GetURLPath) Validate() error {
-	if urlPath.name == "" || urlPath.typeStr == "" {
+	if urlPath.name == "" {
+		return ErrEmptyNameField
+	}
+
+	if urlPath.typeStr == "" {
+
 		return ErrNoCorrectURLPath
 	}
 
@@ -49,7 +55,7 @@ type UpdateURLPath struct {
 	value string
 }
 
-func NewUpdateURLPath(arr []string) *UpdateURLPath {
+func NewUpdateURLPath(arr ...string) *UpdateURLPath {
 	updateURLPath := &UpdateURLPath{GetURLPath: new(GetURLPath)}
 	for i := range arr {
 		updateURLPath.set(i, arr[i])
@@ -61,7 +67,11 @@ func NewUpdateURLPath(arr []string) *UpdateURLPath {
 func (urlPath *UpdateURLPath) Value() string { return urlPath.value }
 
 func (urlPath *UpdateURLPath) Validate() error {
-	if urlPath.value == "" || urlPath.GetURLPath.Validate() != nil {
+	if err := urlPath.GetURLPath.Validate(); err != nil {
+		return err
+	}
+
+	if urlPath.value == "" {
 		return ErrNoCorrectURLPath
 	}
 

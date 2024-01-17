@@ -49,7 +49,7 @@ func TestNewGetURLPath(t *testing.T) {
 
 	for _, test := range tc {
 		t.Run(test.name, func(t *testing.T) {
-			urlPath := NewGetURLPath(test.arr)
+			urlPath := NewGetURLPath(test.arr...)
 			assert.Equal(t, test.want, urlPath)
 		})
 	}
@@ -96,7 +96,7 @@ func TestGetURLPathValidate(t *testing.T) {
 				typeStr: "co",
 				name:    "",
 			},
-			err: ErrNoCorrectURLPath,
+			err: ErrEmptyNameField,
 		},
 		{
 			name: "negative #2",
@@ -111,9 +111,8 @@ func TestGetURLPathValidate(t *testing.T) {
 
 	for _, test := range tc {
 		t.Run(test.name, func(t *testing.T) {
-			urlPath := NewGetURLPath(test.arr)
+			urlPath := NewGetURLPath(test.arr...)
 			assert.Equal(t, test.err, urlPath.Validate())
 		})
 	}
-
 }

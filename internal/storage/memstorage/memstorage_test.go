@@ -7,199 +7,77 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type valByType struct {
+	metric.Valuer
+}
+
+func (v valByType) Type() string {
+	return "not counter or gayge"
+}
+
 func TestSetMemStore(t *testing.T) {
-	type data struct {
-		typeStr string
-		name    string
-		valStr  string
-		err     error
+
+	type fnSet func(string) metric.Valuer
+
+	type metricdb struct {
+		name   string
+		valStr string
+		fn     fnSet
 	}
 
 	tc := []struct {
-		nameTest       string
-		data           []data
-		wantGaugeList  map[string]string
-		wantConterList map[string]string
+		tName  string
+		metric metricdb
+		err    error
 	}{
 		{
-			nameTest: "positive #1",
-			data: []data{
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "12.3",
-					err:     nil,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "12",
-					err:     nil,
+			tName: "positive #1",
+			metric: metricdb{
+				name:   "counter",
+				valStr: "123",
+				fn: func(str string) metric.Valuer {
+					valuer, _ := metric.NewCounter(str)
+					return valuer
 				},
 			},
-			wantGaugeList: map[string]string{
-				"myGauge": "12.3",
-			},
-			wantConterList: map[string]string{
-				"myCounter": "12",
-			},
+			err: nil,
 		},
 		{
-			nameTest: "positive #2",
-			data: []data{
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "12.3",
-					err:     nil,
-				},
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "1234",
-					err:     nil,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "12",
-					err:     nil,
+			tName: "positive #2",
+			metric: metricdb{
+				name:   "gauge",
+				valStr: "123.123",
+				fn: func(str string) metric.Valuer {
+					valuer, _ := metric.NewGauge(str)
+					return valuer
 				},
 			},
-			wantGaugeList: map[string]string{
-				"myGauge": "1234",
-			},
-			wantConterList: map[string]string{
-				"myCounter": "12",
-			},
+			err: nil,
 		},
 		{
-			nameTest: "positive #3",
-			data: []data{
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "12.3",
-					err:     nil,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "12",
-					err:     nil,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "21",
-					err:     nil,
+			tName: "negative #3",
+			metric: metricdb{
+				name:   "not counter or gauge",
+				valStr: "",
+				fn: func(str string) metric.Valuer {
+					return valByType{metric.Counter(0)}
 				},
 			},
-			wantGaugeList: map[string]string{
-				"myGauge": "12.3",
-			},
-			wantConterList: map[string]string{
-				"myCounter": "33",
-			},
-		},
-		{
-			nameTest: "negative #1",
-			data: []data{
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "12.3a",
-					err:     metric.ErrStringIsNotValid,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "12",
-					err:     nil,
-				},
-			},
-			wantGaugeList: map[string]string{},
-			wantConterList: map[string]string{
-				"myCounter": "12",
-			},
-		},
-		{
-			nameTest: "negative #2",
-			data: []data{
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "12.3",
-					err:     nil,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "12a",
-					err:     metric.ErrStringIsNotValid,
-				},
-			},
-			wantGaugeList: map[string]string{
-				"myGauge": "12.3",
-			},
-			wantConterList: map[string]string{},
-		},
-		{
-			nameTest: "negative #3",
-			data: []data{
-				{
-					typeStr: "gaug",
-					name:    "myGauge",
-					valStr:  "12.3",
-					err:     ErrNotSupportedType,
-				},
-				{
-					typeStr: "counter",
-					name:    "myCounter",
-					valStr:  "12",
-					err:     nil,
-				},
-			},
-			wantGaugeList: map[string]string{},
-			wantConterList: map[string]string{
-				"myCounter": "12",
-			},
-		},
-		{
-			nameTest: "negative #4",
-			data: []data{
-				{
-					typeStr: "gauge",
-					name:    "myGauge",
-					valStr:  "12.3",
-					err:     nil,
-				},
-				{
-					typeStr: "counter1",
-					name:    "myCounter",
-					valStr:  "12",
-					err:     ErrNotSupportedType,
-				},
-			},
-			wantGaugeList: map[string]string{
-				"myGauge": "12.3",
-			},
-			wantConterList: map[string]string{},
+			err: ErrNotSupportedType,
 		},
 	}
 
 	for _, test := range tc {
-		t.Run(test.nameTest, func(t *testing.T) {
-			store := New(NewGaugeRepo(), NewCounterRepo())
-			for _, d := range test.data {
-				err := store.Set(d.typeStr, d.name, d.valStr)
-				assert.Equal(t, err, d.err)
-			}
-			assert.Equal(t, test.wantGaugeList, store.GaugeRepo().List())
-			assert.Equal(t, test.wantConterList, store.CounterRepo().List())
+		t.Run(test.tName, func(t *testing.T) {
+			assert.Equal(t,
+				New().Set(
+					metric.NewMetricDB(
+						test.metric.name,
+						test.metric.fn(test.metric.valStr),
+					),
+				),
+				test.err,
+			)
 		})
 	}
-}
-
-func TestGetCounterRepo(t *testing.T) {
 }
