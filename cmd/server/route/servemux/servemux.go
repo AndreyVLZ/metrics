@@ -19,7 +19,7 @@ func New() *serveMux {
 	}
 }
 
-func (s *serveMux) SetStore(store storage.Storage) http.Handler {
+func (s *serveMux) SetStore(store *storage.Store) http.Handler {
 	s.setHandlers(
 		mainhandler.NewMainHandlers(
 			store,
@@ -35,6 +35,12 @@ func (s *serveMux) setHandlers(mh handlers.Handlers) {
 			middleware.GzipMiddleware(
 				http.HandlerFunc(mh.ListHandler),
 			),
+		),
+	)
+
+	s.mux.Handle("/ping",
+		middleware.Get(
+			http.HandlerFunc(mh.PingHandler),
 		),
 	)
 

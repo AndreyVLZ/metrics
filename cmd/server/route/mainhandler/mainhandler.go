@@ -43,7 +43,8 @@ type EmbedingHandlers interface {
 
 type mainHandlers struct {
 	tmpls *template.Template
-	store storage.Storage
+	//store storage.Storage
+	store *storage.Store
 	EmbedingHandlers
 }
 type responseWriter struct {
@@ -71,11 +72,19 @@ func (mh *mainHandlers) handlerFunc(fn funcHandle) http.Handler {
 	})
 }
 
-func NewMainHandlers(store storage.Storage, embHandlers EmbedingHandlers) *mainHandlers {
+func NewMainHandlers(store *storage.Store, embHandlers EmbedingHandlers) *mainHandlers {
 	return &mainHandlers{
 		tmpls:            template.Must(template.New("metrics").Parse(tpls)),
 		store:            store,
 		EmbedingHandlers: embHandlers,
+	}
+}
+
+func (mh *mainHandlers) PingHandler(rw http.ResponseWriter, req *http.Request) {
+	if mh.store.Ping() {
+		rw.WriteHeader(http.StatusOK)
+	} else {
+		http.Error(rw, "", http.StatusInternalServerError)
 	}
 }
 

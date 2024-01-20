@@ -10,15 +10,18 @@ import (
 	"os/signal"
 	"time"
 
+	_ "github.com/lib/pq"
+
 	"github.com/AndreyVLZ/metrics/cmd/server/consumer"
 	"github.com/AndreyVLZ/metrics/cmd/server/producer"
 	"github.com/AndreyVLZ/metrics/cmd/server/route/middleware"
 	"github.com/AndreyVLZ/metrics/cmd/server/wrapstore"
 	"github.com/AndreyVLZ/metrics/internal/storage"
+	"github.com/AndreyVLZ/metrics/internal/storage/postgres"
 )
 
 type Router interface {
-	SetStore(storage.Storage) http.Handler
+	SetStore(*storage.Store) http.Handler
 }
 
 type FuncOpt func(*metricServer)
@@ -31,8 +34,11 @@ type metricServer struct {
 	storeInt  int //при старте
 	storePath string
 	isRestore bool
+	dbDNS     string
+	pqStore   *postgres.PostgresStore
 	consumer  *consumer.Consumer // для чтения метрик
 	producer  *producer.Producer // для записи метрик
+	ss        *storage.Store
 }
 
 func (s *metricServer) configure(router Router, store storage.Storage, storePath string) error {
@@ -52,7 +58,15 @@ func (s *metricServer) configure(router Router, store storage.Storage, storePath
 		store = wrapstore.NewWrapStore(store, producer)
 	}
 
-	s.server.Handler = middleware.Logging(s.log, router.SetStore(store))
+	ss := storage.NewStore(s.dbDNS, store)
+
+	//s.server.Handler = middleware.Logging(s.log, router.SetStore(store))
+	s.server.Handler = middleware.Logging(s.log, router.SetStore(ss))
+
+	/*
+		if s.dbDNS == "" {
+		} //хранение метрик в памяти
+	*/
 
 	return nil
 }
@@ -85,6 +99,10 @@ func (s *metricServer) Start() {
 	}
 
 	s.log.Info("start server", slog.String("addr", s.server.Addr))
+	log.Printf(
+		"flags: addr[%v] storeInterval[%v] storagePath[%v] restore[%v] dbDNS[%v]",
+		s.server.Addr, s.storeInt, s.storePath, s.isRestore, s.dbDNS,
+	)
 
 	ctxMain, cancelMain := context.WithCancel(context.Background())
 
@@ -235,5 +253,11 @@ func SetStorePath(path string) FuncOpt {
 func SetRestore(b bool) FuncOpt {
 	return func(s *metricServer) {
 		s.isRestore = b
+	}
+}
+
+func SetDatabaseDNS(dns string) FuncOpt {
+	return func(s *metricServer) {
+		s.dbDNS = dns
 	}
 }

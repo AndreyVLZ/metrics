@@ -5,6 +5,8 @@ import "net/http"
 type Handlers interface {
 	// [ / ]
 	ListHandler(http.ResponseWriter, *http.Request)
+	// [ /ping ]
+	PingHandler(http.ResponseWriter, *http.Request)
 	// [ /value/ ]
 	ValueHandler
 	// [ /update/ ]

@@ -17,6 +17,7 @@ func main() {
 	storeIntervalPtr := flag.Int("i", 300, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск")
 	storagePathPtr := flag.String("f", "/tmp/metrics-db.json", "полное имя файла, куда сохраняются текущие значения")
 	restorePrt := flag.Bool("r", true, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера ")
+	databaseDNSPtr := flag.String("d", "", "строка с адресом подключения к БД")
 	flag.Parse()
 
 	var opts []metricserver.FuncOpt
@@ -25,6 +26,7 @@ func main() {
 		metricserver.SetStoreInt(*storeIntervalPtr),
 		metricserver.SetStorePath(*storagePathPtr),
 		metricserver.SetRestore(*restorePrt),
+		metricserver.SetDatabaseDNS(*databaseDNSPtr),
 	)
 
 	if addrENV, ok := os.LookupEnv("ADDRESS"); ok {
@@ -38,7 +40,7 @@ func main() {
 			opts = append(opts, metricserver.SetStoreInt(ri))
 		}
 	}
-
+	// NOTE проверить на пустое значение
 	if storagePathENV, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
 		opts = append(opts, metricserver.SetStorePath(storagePathENV))
 	}
@@ -49,6 +51,10 @@ func main() {
 			r = true
 		}
 		opts = append(opts, metricserver.SetRestore(r))
+	}
+
+	if databaseENV, ok := os.LookupEnv("DATABASE_DSN"); ok {
+		opts = append(opts, metricserver.SetDatabaseDNS(databaseENV))
 	}
 
 	// хранилище
