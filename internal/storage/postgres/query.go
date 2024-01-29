@@ -33,7 +33,7 @@ INSERT INTO metric (type_name,name,cval,gval) VALUES
 ($1,$2,$3,$4)
 ON CONFLICT (name,type_name) DO UPDATE
 	SET (cval,gval) = (EXCLUDED.cval+metric.cval,EXCLUDED.gval)
-RETURNING type_name,name,cval,gval
+RETURNING cval,gval
 `
 
 const setMetricSQL string = `
@@ -41,7 +41,7 @@ INSERT INTO metric AS met (type_name,name,cval,gval) VALUES
 ($1,$2,$3,$4)
 ON CONFLICT (name,type_name) DO UPDATE
 	SET (cval,gval) = (met.cval,met.gval)
-RETURNING type_name,name,cval,gval
+RETURNING cval,gval
 `
 
 const createTablesSQL string = `
