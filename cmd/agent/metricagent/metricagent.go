@@ -120,32 +120,59 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 
 	for err == nil {
 		time.Sleep(time.Duration(c.reportInterval) * time.Second)
+
 		metrics := c.store.List(context.Background())
-		for i := range metrics {
-			err = c.SendMetricPost(metrics[i])
-			if err != nil {
-				log.Printf("err> %v\n", err)
-			}
+		err := c.SendBatch(metrics)
+		if err != nil {
+			log.Printf("err send batch metrics> %v\n", err)
 		}
+
+		/*
+			for i := range metrics {
+				err = c.SendMetricPost(metrics[i])
+				if err != nil {
+					log.Printf("err> %v\n", err)
+				}
+			}
+		*/
 	}
 
 	wg.Done()
 }
 
-func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
-	url := fmt.Sprintf("http://%s/update/", c.addr)
+func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
+	metricsJSON := make([]mainhandler.MetricsJSON, len(metrics))
+	for i := range metrics {
+		metricJSON, err := mainhandler.NewMetricJSONFromMetricDB(metrics[i])
+		if err != nil {
+			return err
+		}
 
-	metricJSON, err := mainhandler.NewMetricJSONFromMetricDB(metric)
+		metricsJSON[i] = metricJSON
+	}
+
+	JSON, err := json.Marshal(metricsJSON)
 	if err != nil {
 		return err
 	}
 
-	data, err := json.Marshal(metricJSON)
-	if err != nil {
-		return err
-	}
+	/*
+		if err = retry(4, time.Second, func() error {
+			return c.sendData(JSON)
+		}); err!=nil{
+			log.Printf("ERR %v\n", err)
+		}
+	*/
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
+	return retry(4, time.Second, func() error {
+		return c.sendData(JSON)
+	})
+}
+
+func (c *MetricClient) sendData(data []byte) error {
+	url := fmt.Sprintf("http://%s/updates/", c.addr)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("err build request: %v", err)
 	}
@@ -162,6 +189,38 @@ func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
 	}
 
 	return nil
+}
+
+func retry(attempts int, sleep time.Duration, f func() error) (err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			log.Printf("Повтор псле ошибки %v\n", err)
+			fmt.Printf("SLEEP %v\n", sleep)
+			time.Sleep(sleep)
+			sleep += 2 * time.Second
+		}
+
+		err = f()
+		if err == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("Попыток %d, error: %s", attempts, err)
+}
+
+func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
+
+	metricJSON, err := mainhandler.NewMetricJSONFromMetricDB(metric)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(metricJSON)
+	if err != nil {
+		return err
+	}
+	return c.sendData(data)
 }
 
 // SendMetric Оправка метрики агентом на сервер по адресу
