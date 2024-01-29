@@ -132,20 +132,6 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 			wg.Done()
 		}
 	}
-	/*
-		for err == nil {
-			time.Sleep(time.Duration(c.reportInterval) * time.Second)
-
-			metrics := c.store.List(context.Background())
-			err := c.SendBatch(metrics)
-			if err != nil {
-				log.Printf("err send batch metrics> %v\n", err)
-			}
-
-		}
-
-		wg.Done()
-	*/
 }
 
 func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
@@ -163,14 +149,6 @@ func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
 	if err != nil {
 		return err
 	}
-
-	/*
-		if err = retry(4, time.Second, func() error {
-			return c.sendData(JSON)
-		}); err!=nil{
-			log.Printf("ERR %v\n", err)
-		}
-	*/
 
 	return retry(4, time.Second, func() error {
 		return c.sendData(JSON)
