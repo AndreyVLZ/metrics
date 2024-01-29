@@ -1,6 +1,7 @@
 package mainhandler
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -83,25 +84,26 @@ type want struct {
 }
 
 type fakeStore struct {
+	storage.Storage
 	err error
 	m   metric.MetricDB
 }
 
-func (fs fakeStore) Get(m metric.MetricDB) (metric.MetricDB, error) {
+func (fs fakeStore) Get(ctx context.Context, m metric.MetricDB) (metric.MetricDB, error) {
 	if fs.err != nil {
 		return metric.MetricDB{}, fs.err
 	}
 	return fs.m, nil
 }
 
-func (fs fakeStore) Set(metric.MetricDB) error {
+func (fs fakeStore) Set(ctx context.Context, m metric.MetricDB) (metric.MetricDB, error) {
 	if fs.err != nil {
-		return fs.err
+		return metric.MetricDB{}, fs.err
 	}
-	return nil
+	return fs.m, nil
 }
 
-func (fs fakeStore) List() []metric.MetricDB {
+func (fs fakeStore) List(ctx context.Context) []metric.MetricDB {
 	if fs.err != nil {
 		return []metric.MetricDB{}
 	}
@@ -192,8 +194,7 @@ func TestGetValueHandler(t *testing.T) {
 	for nTest, tests := range tc {
 		for _, test := range tests {
 			mh := NewMainHandlers(
-				storage.NewStore("", test.store),
-				//test.store,
+				test.store,
 				test.embed,
 			)
 			t.Run(nTest+" "+test.tName, func(t *testing.T) {

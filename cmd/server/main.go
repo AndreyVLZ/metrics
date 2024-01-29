@@ -6,10 +6,8 @@ import (
 	"strconv"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
-	"github.com/AndreyVLZ/metrics/cmd/server/route/servemux"
 
 	"github.com/AndreyVLZ/metrics/internal/log/zap"
-	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 )
 
 func main() {
@@ -24,8 +22,8 @@ func main() {
 	opts = append(opts,
 		metricserver.SetAddr(*addrPtr),
 		metricserver.SetStoreInt(*storeIntervalPtr),
-		metricserver.SetStorePath(*storagePathPtr),
 		metricserver.SetRestore(*restorePrt),
+		metricserver.SetStorePath(*storagePathPtr),
 		metricserver.SetDatabaseDNS(*databaseDNSPtr),
 	)
 
@@ -57,17 +55,11 @@ func main() {
 		opts = append(opts, metricserver.SetDatabaseDNS(databaseENV))
 	}
 
-	// хранилище
-	store := memstorage.New()
-
-	// объявление роутера
-	route := servemux.New()
-
 	// объявление логера
 	logger := zap.New(zap.DefaultConfig())
 
 	//сервер
-	srv, err := metricserver.New(logger, route, store, opts...)
+	srv, err := metricserver.New(logger, opts...)
 	if err != nil {
 		logger.Error("Err server build %v\n", err)
 	}

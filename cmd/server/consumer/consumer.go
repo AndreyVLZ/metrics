@@ -9,10 +9,32 @@ import (
 )
 
 type Consumer struct {
-	file    *os.File
-	scanner *bufio.Scanner
+	fileName string
+	file     *os.File
+	scanner  *bufio.Scanner
 }
 
+func New(filename string) *Consumer {
+	return &Consumer{
+		fileName: filename,
+	}
+}
+
+func (c *Consumer) Open() error {
+	file, err := os.OpenFile(c.fileName, os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	c.file = file
+	c.scanner = bufio.NewScanner(file)
+	return nil
+}
+
+func (c *Consumer) Close() error {
+	return c.file.Close()
+}
+
+/*
 func NewConsumer(filename string) (*Consumer, error) {
 	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -24,6 +46,7 @@ func NewConsumer(filename string) (*Consumer, error) {
 		scanner: bufio.NewScanner(file),
 	}, nil
 }
+*/
 
 func (c *Consumer) ReadMetric() ([]metric.MetricDB, error) {
 	arr := []metric.MetricDB{}
@@ -40,9 +63,21 @@ func (c *Consumer) ReadMetric() ([]metric.MetricDB, error) {
 		arr = append(arr, metricDB)
 	}
 
-	return corectiveArr(arr), nil
+	// NOTE:
+	//return reverseArray(arr), nil
+	return arr, nil
 }
 
+func reverseArray(arr []metric.MetricDB) []metric.MetricDB {
+	l := len(arr)
+	for i := 0; i < l/2; i++ {
+		arr[i], arr[l-1-i] = arr[l-1-i], arr[i]
+	}
+
+	return arr
+}
+
+/*
 func corectiveArr(arr []metric.MetricDB) []metric.MetricDB {
 	arrToSend := []metric.MetricDB{}
 
@@ -58,7 +93,4 @@ func corectiveArr(arr []metric.MetricDB) []metric.MetricDB {
 
 	return arrToSend
 }
-
-func (c *Consumer) Close() error {
-	return c.file.Close()
-}
+*/

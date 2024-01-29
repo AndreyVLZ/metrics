@@ -10,7 +10,8 @@ import (
 )
 
 type serveMux struct {
-	mux *http.ServeMux
+	mux   *http.ServeMux
+	store storage.Storage
 }
 
 func New() *serveMux {
@@ -19,7 +20,7 @@ func New() *serveMux {
 	}
 }
 
-func (s *serveMux) SetStore(store *storage.Store) http.Handler {
+func (s *serveMux) SetStore(store storage.Storage) http.Handler {
 	s.setHandlers(
 		mainhandler.NewMainHandlers(
 			store,
@@ -40,7 +41,7 @@ func (s *serveMux) setHandlers(mh handlers.Handlers) {
 
 	s.mux.Handle("/ping",
 		middleware.Get(
-			http.HandlerFunc(mh.PingHandler),
+			mh.PingHandler(),
 		),
 	)
 
@@ -48,6 +49,14 @@ func (s *serveMux) setHandlers(mh handlers.Handlers) {
 		middleware.Post(
 			middleware.GzipMiddleware(
 				mh.PostUpdateHandler().ServeHTTP,
+			),
+		),
+	)
+
+	s.mux.Handle("/updates/",
+		middleware.Post(
+			middleware.GzipMiddleware(
+				mh.PostUpdatesHandler().ServeHTTP,
 			),
 		),
 	)

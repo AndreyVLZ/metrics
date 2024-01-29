@@ -2,6 +2,7 @@ package metricagent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -109,7 +110,8 @@ func (c *MetricClient) updateAllMetrics() error {
 }
 
 func (c *MetricClient) randomValueUpdate() error {
-	return c.store.Set(metric.NewMetricDB("RandomValue", metric.Gauge(rand.Float64())))
+	_, err := c.store.Set(context.Background(), metric.NewMetricDB("RandomValue", metric.Gauge(rand.Float64())))
+	return err
 }
 
 // SendMetrics Чтение и отправка всех сохраненых метрик
@@ -118,7 +120,7 @@ func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 
 	for err == nil {
 		time.Sleep(time.Duration(c.reportInterval) * time.Second)
-		metrics := c.store.List()
+		metrics := c.store.List(context.Background())
 		for i := range metrics {
 			err = c.SendMetricPost(metrics[i])
 			if err != nil {

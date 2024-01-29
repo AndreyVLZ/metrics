@@ -6,11 +6,13 @@ type Handlers interface {
 	// [ / ]
 	ListHandler(http.ResponseWriter, *http.Request)
 	// [ /ping ]
-	PingHandler(http.ResponseWriter, *http.Request)
+	PingHandler() http.Handler
 	// [ /value/ ]
 	ValueHandler
 	// [ /update/ ]
 	UpdateHandler
+	// [ /updates/ ]
+	PostUpdatesHandler() http.Handler
 }
 
 type ValueHandler interface {

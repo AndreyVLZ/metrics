@@ -1,6 +1,8 @@
 package wrapstore
 
 import (
+	"context"
+	"fmt"
 	"log"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/producer"
@@ -20,11 +22,12 @@ func NewWrapStore(store storage.Storage, produce *producer.Producer) WrapStore {
 	}
 }
 
-func (ws WrapStore) Set(m metric.MetricDB) error {
+func (ws WrapStore) Set(ctx context.Context, m metric.MetricDB) (metric.MetricDB, error) {
 	err := ws.producer.WriteMetric(&m)
+	fmt.Printf("Wrap write %v\n", m)
 	if err != nil {
 		log.Printf("err set wrap store %v\n", err)
 	}
 
-	return ws.Storage.Set(m)
+	return ws.Storage.Set(ctx, m)
 }
