@@ -63,5 +63,5 @@ func TestStart(t *testing.T) {
 	}
 	actualArr := store.List(context.Background())
 
-	assert.Equal(t, expectArr, actualArr)
+	assert.ElementsMatch(t, expectArr, actualArr)
 }
