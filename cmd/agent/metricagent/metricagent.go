@@ -51,6 +51,7 @@ type MetricClient struct {
 	pollInterval   int
 	reportInterval int
 	client         *http.Client
+	exit           chan (struct{})
 }
 
 func New(opts ...FuncOpt) *MetricClient {
@@ -118,26 +119,33 @@ func (c *MetricClient) randomValueUpdate() error {
 func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 	var err error
 
-	for err == nil {
-		time.Sleep(time.Duration(c.reportInterval) * time.Second)
+	for {
+		select {
+		case <-time.After(time.Duration(c.reportInterval) * time.Second):
+			metrics := c.store.List(context.Background())
+			err = c.SendBatch(metrics)
+			if err != nil {
+				log.Printf("err send batch metrics> %v\n", err)
+				c.exit <- struct{}{}
+			}
+		case <-c.exit:
+			wg.Done()
+		}
+	}
+	/*
+		for err == nil {
+			time.Sleep(time.Duration(c.reportInterval) * time.Second)
 
-		metrics := c.store.List(context.Background())
-		err := c.SendBatch(metrics)
-		if err != nil {
-			log.Printf("err send batch metrics> %v\n", err)
+			metrics := c.store.List(context.Background())
+			err := c.SendBatch(metrics)
+			if err != nil {
+				log.Printf("err send batch metrics> %v\n", err)
+			}
+
 		}
 
-		/*
-			for i := range metrics {
-				err = c.SendMetricPost(metrics[i])
-				if err != nil {
-					log.Printf("err> %v\n", err)
-				}
-			}
-		*/
-	}
-
-	wg.Done()
+		wg.Done()
+	*/
 }
 
 func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
@@ -206,7 +214,7 @@ func retry(attempts int, sleep time.Duration, f func() error) (err error) {
 		}
 	}
 
-	return fmt.Errorf("Попыток %d, error: %s", attempts, err)
+	return fmt.Errorf("попыток %d, error: %s", attempts, err)
 }
 
 func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
