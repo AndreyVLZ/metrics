@@ -20,6 +20,7 @@ func New(store storage.Storage, fileName string) *restoreService {
 }
 
 func (rs *restoreService) Name() string { return "restoreService" }
+
 func (rs *restoreService) Start() error {
 	err := rs.consumer.Open()
 	if err != nil {
@@ -29,6 +30,7 @@ func (rs *restoreService) Start() error {
 	if err != nil {
 		return err
 	}
+
 	return rs.store.SetBatch(context.Background(), arr)
 }
 

@@ -34,20 +34,6 @@ func (c *Consumer) Close() error {
 	return c.file.Close()
 }
 
-/*
-func NewConsumer(filename string) (*Consumer, error) {
-	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Consumer{
-		file:    file,
-		scanner: bufio.NewScanner(file),
-	}, nil
-}
-*/
-
 func (c *Consumer) ReadMetric() ([]metric.MetricDB, error) {
 	arr := []metric.MetricDB{}
 	for c.scanner.Scan() {
@@ -76,21 +62,3 @@ func reverseArray(arr []metric.MetricDB) []metric.MetricDB {
 
 	return arr
 }
-
-/*
-func corectiveArr(arr []metric.MetricDB) []metric.MetricDB {
-	arrToSend := []metric.MetricDB{}
-
-	mapNames := make(map[string]struct{}, len(arr))
-
-	for i := len(arr) - 1; i >= 0; i-- {
-		_, ok := mapNames[arr[i].Name()]
-		if !ok {
-			arrToSend = append(arrToSend, arr[i])
-		}
-		mapNames[arr[i].Name()] = struct{}{}
-	}
-
-	return arrToSend
-}
-*/

@@ -25,7 +25,7 @@ func New(store storage.Storage, storeInt int, producer *producer.Producer) *save
 	}
 }
 
-func (ss *saveSevice) Name() string { return "save Service" }
+func (ss *saveSevice) Name() string { return "saveService" }
 
 func (ss *saveSevice) Start() error {
 	err := ss.producer.Open()
