@@ -68,7 +68,6 @@ func (mh *mainHandlers) handlerFunc(fn funcHandle) http.Handler {
 		if err != nil {
 			http.Error(rw, err.Error(), httpStatus)
 		}
-		rw.WriteHeader(httpStatus)
 	})
 }
 
@@ -85,7 +84,7 @@ func (mh *mainHandlers) PingHandler() http.Handler {
 		if err := mh.store.Ping(); err != nil {
 			return http.StatusInternalServerError, err
 		}
-		return http.StatusOK, nil
+		return 0, nil
 	})
 }
 
@@ -95,7 +94,7 @@ func (mh *mainHandlers) ListHandler() http.Handler {
 		if err := mh.tmpls.ExecuteTemplate(w, "List", mh.store.List(req.Context())); err != nil {
 			return http.StatusInternalServerError, err
 		}
-		return http.StatusOK, nil
+		return 0, nil
 	})
 }
 
@@ -125,7 +124,7 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 			return http.StatusNotFound, err
 		}
 
-		return http.StatusOK, nil
+		return 0, nil
 	})
 }
 
@@ -135,6 +134,7 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 func (mh *mainHandlers) PostValueHandler() http.Handler {
 	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
 		rw := responseWriter{w}
+		w.Header().Set("Content-Type", ApplicationJSONConst)
 
 		metricDB, err := metricFromBoby(req.Body)
 
@@ -147,35 +147,13 @@ func (mh *mainHandlers) PostValueHandler() http.Handler {
 			return http.StatusNotFound, err
 		}
 
-		w.Header().Set("Content-Type", ApplicationJSONConst)
-
+		w.WriteHeader(http.StatusOK)
 		err = rw.WriteAsJSON(newMetricDB)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		return http.StatusOK, nil
-	})
-}
-
-func (mh *mainHandlers) PostUpdatesHandler() http.Handler {
-	return mh.handlerFunc(func(rw http.ResponseWriter, req *http.Request) (int, error) {
-		if req.Header.Get("Content-Type") != ApplicationJSONConst {
-			return http.StatusBadRequest, errors.New("contentType is not appJson")
-		}
-
-		metricsDB, err := metricsFromBoby(req.Body)
-		if err != nil {
-			return http.StatusBadRequest, err
-		}
-
-		rw.Header().Set("Content-Type", ApplicationJSONConst)
-
-		if err := mh.store.UpdateBatch(req.Context(), metricsDB); err != nil {
-			return http.StatusBadRequest, err
-		}
-
-		return http.StatusOK, nil
+		return 0, nil
 	})
 }
 
@@ -208,11 +186,12 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 
 	rw.w.Header().Set("Content-Type", ApplicationJSONConst)
 
+	rw.w.WriteHeader(http.StatusOK)
 	if err = rw.WriteAsJSON(newMetricDB); err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	return http.StatusOK, nil
+	return 0, nil
 }
 
 // Парсинг метрики из URL
@@ -231,7 +210,29 @@ func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (in
 		return http.StatusNotFound, err
 	}
 
-	return http.StatusOK, nil
+	return 0, nil
+}
+
+func (mh *mainHandlers) PostUpdatesHandler() http.Handler {
+	return mh.handlerFunc(func(rw http.ResponseWriter, req *http.Request) (int, error) {
+		if req.Header.Get("Content-Type") != ApplicationJSONConst {
+			return http.StatusBadRequest, errors.New("contentType is not appJson")
+		}
+
+		metricsDB, err := metricsFromBoby(req.Body)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		rw.Header().Set("Content-Type", ApplicationJSONConst)
+		rw.WriteHeader(http.StatusOK)
+
+		if err := mh.store.UpdateBatch(req.Context(), metricsDB); err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		return 0, nil
+	})
 }
 
 func metricsFromBoby(body io.ReadCloser) ([]metric.MetricDB, error) {
