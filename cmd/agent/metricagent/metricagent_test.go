@@ -61,8 +61,7 @@ func TestNew(t *testing.T) {
 type testStore struct {
 	typeStr string
 	name    string
-	//val     string
-	val metric.Valuer
+	val     metric.Valuer
 }
 
 func (s *testStore) Set(metric metric.MetricDB) error {

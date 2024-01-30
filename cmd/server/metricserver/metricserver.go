@@ -8,203 +8,214 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
-	"github.com/AndreyVLZ/metrics/cmd/server/consumer"
 	"github.com/AndreyVLZ/metrics/cmd/server/producer"
+	"github.com/AndreyVLZ/metrics/cmd/server/route"
 	"github.com/AndreyVLZ/metrics/cmd/server/route/middleware"
+	"github.com/AndreyVLZ/metrics/cmd/server/service/restoreservice"
+	"github.com/AndreyVLZ/metrics/cmd/server/service/saveservice"
 	"github.com/AndreyVLZ/metrics/cmd/server/wrapstore"
 	"github.com/AndreyVLZ/metrics/internal/storage"
 )
 
-type Router interface {
-	SetStore(storage.Storage) http.Handler
-}
-
 type FuncOpt func(*metricServer)
 
+type Service interface {
+	Name() string
+	Start() error
+	Stop() error
+}
+
+type ServerConfig struct {
+	storageType storage.StorageType
+	dbDNS       string
+	storePath   string
+	isRestore   bool
+	storeInt    int //при старте
+}
+
 type metricServer struct {
-	server    http.Server
-	store     storage.Storage
-	log       *slog.Logger
-	handler   http.Handler
-	storeInt  int //при старте
-	storePath string
-	isRestore bool
-	consumer  *consumer.Consumer // для чтения метрик
-	producer  *producer.Producer // для записи метрик
+	wg       sync.WaitGroup
+	log      *slog.Logger
+	server   *http.Server
+	store    storage.Storage
+	cfg      *ServerConfig
+	services []Service
 }
 
-func (s *metricServer) configure(router Router, store storage.Storage, storePath string) error {
-	consumer, err := consumer.NewConsumer(storePath)
-	if err != nil {
-		return err
-	}
-	s.consumer = consumer
-
-	producer, err := producer.NewProducer(storePath)
-	if err != nil {
-		return err
-	}
-	s.producer = producer
-
-	if s.storeInt == 0 {
-		store = wrapstore.NewWrapStore(store, producer)
-	}
-
-	s.server.Handler = middleware.Logging(s.log, router.SetStore(store))
-
-	return nil
-}
-
-func New(log *slog.Logger, router Router, store storage.Storage, opts ...FuncOpt) (*metricServer, error) {
+func New(log *slog.Logger, opts ...FuncOpt) (*metricServer, error) {
 	srv := &metricServer{
-		log:   log,
-		store: store,
+		log:    log,
+		server: &http.Server{},
+		cfg:    &ServerConfig{},
 	}
 
 	for _, opt := range opts {
 		opt(srv)
 	}
 
-	err := srv.configure(router, store, srv.storePath)
+	err := srv.initStore()
 	if err != nil {
 		return nil, err
 	}
+
+	// добавляет сервисы и меняет store
+	srv.configureServices()
+
+	router, err := route.New(route.Config{RouteType: route.RouteTypeServeMux})
+	if err != nil {
+		return nil, err
+	}
+
+	srv.server.Handler = middleware.Logging(srv.log, router.SetStore(srv.store))
 
 	return srv, nil
 }
 
 func (s *metricServer) Start() {
-	// загрузка из файла
-	if s.isRestore {
-		err := s.restore()
+	mainCtx := context.Background()
+	ctx, stop := signal.NotifyContext(mainCtx, os.Interrupt)
+	defer stop()
+
+	// запускаем хранилище
+	err := s.store.Open()
+	if err != nil {
+		s.log.Error("store Open", "err", err)
+		return
+	}
+
+	// запускаем сервисы
+	for i := range s.services {
+		err := s.services[i].Start()
+		s.log.Info("services Start", "name", s.services[i].Name())
 		if err != nil {
-			log.Printf("err reStore %v\n", err)
+			s.log.Error("ERR Start services", s.services[i].Name(), err)
 		}
 	}
 
-	s.log.Info("start server", slog.String("addr", s.server.Addr))
+	s.log.LogAttrs(mainCtx,
+		slog.LevelInfo, "start server",
+		slog.String("addr", s.server.Addr),
+		slog.Group("flags",
+			slog.Int("storeInterval", s.cfg.storeInt),
+			slog.String("storePath", s.cfg.storePath),
+			slog.Bool("restore", s.cfg.isRestore),
+			slog.String("dbDNS", s.cfg.dbDNS),
+		),
+	)
 
-	ctxMain, cancelMain := context.WithCancel(context.Background())
+	servicesStopedCtx, cancelStopped := context.WithCancel(mainCtx)
+	defer cancelStopped()
 
-	// регистрируем функции для отмены
-	s.registerOnShutdown(cancelMain)
+	// регистрируем функции для остановки
+	s.registerOnShutdown()
 
 	// слушаем сервер
 	go s.listenAndServe()
 
-	// старт функции для периодического сохранения
-	go s.savedByContex(ctxMain)
-
 	// ловим сигналы выхода
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	// блокируем
 	<-ctx.Done()
-	log.Println("signal [Ctrl+C]")
+	s.log.Info("Ctrl+C")
+	stop()
 
-	// останавливаем сервер с конкетстом
-	s.log.Info("server stopped....")
-	if err := s.stop(ctxMain); err != nil {
-		s.log.Error("err stopped server:", err)
-	}
+	// Ждем когда остановятся все сервисы
+	go func() {
+		s.wg.Wait()
+		s.log.Info("all services stopped")
+		// отменяем контекс для сервисов
+		cancelStopped()
+	}()
 
-	s.log.Info("server stop OK")
-	os.Exit(0)
-}
-
-func (s *metricServer) stop(ctxMain context.Context) error {
 	// контекс для отмены на 10сек
-	timeoutCtx, cancel := context.WithTimeout(ctxMain, 10*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(mainCtx, 10*time.Second)
 	defer cancel()
 
-	go s.shutdown(timeoutCtx)
-
-	// блокируем
-	<-timeoutCtx.Done()
-
-	switch timeoutCtx.Err() {
-	case context.Canceled:
-		return nil
-	case context.DeadlineExceeded:
-		return errors.New("deadLine")
-	default:
-		return timeoutCtx.Err()
-	}
-}
-
-// Востановить метрики из файла
-func (s *metricServer) restore() error {
-	arr, err := s.consumer.ReadMetric()
-	if err != nil {
-		return err
-	}
-
-	for i := range arr {
-		if err := s.store.Set(arr[i]); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *metricServer) savedByContex(ctx context.Context) {
-	for {
-		time.Sleep(time.Duration(s.storeInt) * time.Second)
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if err := s.saved(); err != nil {
-				log.Printf("Err save metrics %v\n", err)
-			}
-		}
-	}
-}
-
-func (s *metricServer) registerOnShutdown(cancel func()) {
-	s.server.RegisterOnShutdown(s.shutdownFunc(cancel))
-}
-
-func (s *metricServer) shutdownFunc(cancelFn func()) func() {
-	return func() {
-		if err := s.saved(); err != nil {
-			log.Printf("Err save metrics %v\n", err)
-		}
-
-		if err := s.consumer.Close(); err != nil {
-			log.Printf("Err close consumer %v\n", err)
-		}
-		if err := s.producer.Close(); err != nil {
-			log.Printf("Err close producer %v\n", err)
-		}
-
-		cancelFn()
-	}
-}
-
-func (s *metricServer) saved() error {
-	err := s.producer.Trunc()
-	if err != nil {
-		return err
-	}
-
-	arr := s.store.List()
-	for _, m := range arr {
-		err := s.producer.WriteMetric(&m)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *metricServer) shutdown(timeoutCtx context.Context) {
 	if err := s.server.Shutdown(timeoutCtx); err != nil {
-		log.Printf("err shutdown %v\n", err)
+		s.log.Error("err shutdown", err)
+	}
+
+	select {
+	case <-timeoutCtx.Done():
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+			s.log.Error("deadline")
+		}
+	case <-servicesStopedCtx.Done():
+		s.log.Info("server stop")
+	}
+}
+
+func (s *metricServer) registerOnShutdown() {
+	for i := range s.services {
+		s.server.RegisterOnShutdown(
+			s.registerByWG(&s.wg, s.services[i]),
+		)
+	}
+}
+
+func (s *metricServer) registerByWG(wg *sync.WaitGroup, service Service) func() {
+	wg.Add(1)
+	s.log.Info("registry service", "name", service.Name())
+	return func() {
+		defer wg.Done()
+		err := service.Stop()
+		if err != nil {
+			s.log.Error("stop service", "name", service.Name(), "err", err)
+		}
+		s.log.Info("stop sevice", "name", service.Name())
+	}
+}
+
+func (s *metricServer) initStore() error {
+	storageType := storage.StorageTypeInmemory
+
+	if s.cfg.dbDNS != "" {
+		storageType = storage.StorageTypePostgres
+	}
+
+	store, err := storage.New(storage.Config{
+		StorageType: storageType,
+		ConnDB:      s.cfg.dbDNS,
+	})
+	if err != nil {
+		return err
+	}
+
+	s.store = store
+
+	return nil
+}
+
+func (s *metricServer) addService(servise Service) {
+	s.services = append(s.services, servise)
+}
+
+func (s *metricServer) configureServices() {
+	if s.cfg.storePath == "" {
+		return
+	}
+
+	// Запись в файл
+	if s.cfg.isRestore {
+		// restoreService опционально
+		s.addService(
+			restoreservice.New(s.store, s.cfg.storePath),
+		)
+	}
+
+	prod := producer.New(s.cfg.storePath)
+	switch s.cfg.storeInt {
+	case 0:
+		// wrapStore для записи в файл синхронно
+		s.store = wrapstore.NewWrapStore(s.store, prod)
+	default:
+		// saveService дфл записи в файл по интервалу
+		s.addService(saveservice.New(
+			s.store,
+			s.cfg.storeInt,
+			prod,
+		))
 	}
 }
 
@@ -222,18 +233,24 @@ func SetAddr(addr string) FuncOpt {
 
 func SetStoreInt(interval int) FuncOpt {
 	return func(s *metricServer) {
-		s.storeInt = interval
+		s.cfg.storeInt = interval
 	}
 }
 
 func SetStorePath(path string) FuncOpt {
 	return func(s *metricServer) {
-		s.storePath = path
+		s.cfg.storePath = path
 	}
 }
 
 func SetRestore(b bool) FuncOpt {
 	return func(s *metricServer) {
-		s.isRestore = b
+		s.cfg.isRestore = b
+	}
+}
+
+func SetDatabaseDNS(dns string) FuncOpt {
+	return func(s *metricServer) {
+		s.cfg.dbDNS = dns
 	}
 }

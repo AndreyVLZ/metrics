@@ -79,13 +79,24 @@ func NewMainHandlers(store storage.Storage, embHandlers EmbedingHandlers) *mainH
 	}
 }
 
-func (mh *mainHandlers) ListHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", TextHTMLConst)
-	rw.WriteHeader(http.StatusOK)
-	err := mh.tmpls.ExecuteTemplate(rw, "List", mh.store.List())
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-	}
+func (mh *mainHandlers) PingHandler() http.Handler {
+	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
+		if err := mh.store.Ping(); err != nil {
+			return http.StatusInternalServerError, err
+		}
+		return 0, nil
+	})
+}
+
+func (mh *mainHandlers) ListHandler() http.Handler {
+	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
+		w.Header().Set("Content-Type", TextHTMLConst)
+		w.WriteHeader(http.StatusOK)
+		if err := mh.tmpls.ExecuteTemplate(w, "List", mh.store.List(req.Context())); err != nil {
+			return http.StatusInternalServerError, err
+		}
+		return 0, nil
+	})
 }
 
 // Парсинг метрики из URL
@@ -96,13 +107,13 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 		rw := responseWriter{w}
 		metricDB, err := mh.EmbedingHandlers.GetMetricDBFromRequest(req)
 		if err != nil {
-			if err.Error() == urlpath.ErrEmptyNameField.Error() {
+			if errors.Is(err, urlpath.ErrEmptyNameField) {
 				return http.StatusNotFound, err
 			}
 			return http.StatusBadRequest, err
 		}
 
-		newMetricDB, err := mh.store.Get(metricDB)
+		newMetricDB, err := mh.store.Get(req.Context(), metricDB)
 		if err != nil {
 			return http.StatusNotFound, err
 		}
@@ -110,8 +121,7 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 		// NOTE
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		err = rw.WriteString(newMetricDB.String())
-		if err != nil {
+		if err = rw.WriteString(newMetricDB.String()); err != nil {
 			return http.StatusNotFound, err
 		}
 
@@ -125,6 +135,7 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 func (mh *mainHandlers) PostValueHandler() http.Handler {
 	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
 		rw := responseWriter{w}
+		w.Header().Set("Content-Type", ApplicationJSONConst)
 
 		metricDB, err := metricFromBoby(req.Body)
 
@@ -132,14 +143,12 @@ func (mh *mainHandlers) PostValueHandler() http.Handler {
 			return http.StatusNotFound, err
 		}
 
-		newMetricDB, err := mh.store.Get(metricDB)
+		newMetricDB, err := mh.store.Get(req.Context(), metricDB)
 		if err != nil {
 			return http.StatusNotFound, err
 		}
 
-		w.Header().Set("Content-Type", ApplicationJSONConst)
-		rw.w.WriteHeader(http.StatusOK)
-
+		w.WriteHeader(http.StatusOK)
 		err = rw.WriteAsJSON(newMetricDB)
 		if err != nil {
 			return http.StatusBadRequest, err
@@ -171,21 +180,15 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 		return http.StatusNotFound, err
 	}
 
-	err = mh.store.Set(metricDB)
+	newMetricDB, err := mh.store.Update(req.Context(), metricDB)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	newMetricDB, err := mh.store.Get(metricDB)
-	if err != nil {
-		return http.StatusNotFound, err
-	}
-
 	rw.w.Header().Set("Content-Type", ApplicationJSONConst)
-	rw.w.WriteHeader(http.StatusOK)
 
-	err = rw.WriteAsJSON(newMetricDB)
-	if err != nil {
+	rw.w.WriteHeader(http.StatusOK)
+	if err = rw.WriteAsJSON(newMetricDB); err != nil {
 		return http.StatusBadRequest, err
 	}
 
@@ -197,13 +200,13 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (int, error) {
 	metricDB, err := mh.EmbedingHandlers.GetUpdateMetricDBFromRequest(req)
 	if err != nil {
-		if err.Error() == urlpath.ErrEmptyNameField.Error() {
+		if errors.Is(err, urlpath.ErrEmptyNameField) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusBadRequest, err
 	}
 
-	err = mh.store.Set(metricDB)
+	_, err = mh.store.Update(req.Context(), metricDB)
 	if err != nil {
 		return http.StatusNotFound, err
 	}
@@ -211,13 +214,58 @@ func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (in
 	return 0, nil
 }
 
-func metricFromBoby(body io.ReadCloser) (metric.MetricDB, error) {
+func (mh *mainHandlers) PostUpdatesHandler() http.Handler {
+	return mh.handlerFunc(func(rw http.ResponseWriter, req *http.Request) (int, error) {
+		if req.Header.Get("Content-Type") != ApplicationJSONConst {
+			return http.StatusBadRequest, errors.New("contentType is not appJson")
+		}
+
+		metricsDB, err := metricsFromBoby(req.Body)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		rw.Header().Set("Content-Type", ApplicationJSONConst)
+		rw.WriteHeader(http.StatusOK)
+
+		if err := mh.store.UpdateBatch(req.Context(), metricsDB); err != nil {
+			return http.StatusBadRequest, err
+		}
+
+		return 0, nil
+	})
+}
+
+func metricsFromBoby(body io.ReadCloser) ([]metric.MetricDB, error) {
 	defer body.Close()
 
-	var metricJSON MetricsJSON
+	var metricsJSON []MetricsJSON
+	var metricsDB []metric.MetricDB
 
+	if err := json.NewDecoder(body).Decode(&metricsJSON); err != nil {
+		return nil, err
+	}
+
+	metricsDB = make([]metric.MetricDB, len(metricsJSON))
+	for i := range metricsJSON {
+		metricDB, err := NewMetricDBFromMetricJSON(metricsJSON[i])
+		if err != nil {
+			return nil, err
+		}
+
+		metricsDB[i] = metricDB
+	}
+
+	return metricsDB, nil
+}
+
+var ErrJSONSyntax = errors.New("err json syntax")
+
+func metricFromBoby(body io.ReadCloser) (metric.MetricDB, error) {
+	defer body.Close()
+	var metricJSON MetricsJSON
 	if err := json.NewDecoder(body).Decode(&metricJSON); err != nil {
-		return metric.MetricDB{}, err
+		return metric.MetricDB{}, ErrJSONSyntax
 	}
 
 	metricDB, err := NewMetricDBFromMetricJSON(metricJSON)
@@ -254,6 +302,8 @@ func NewMetricJSONFromMetricDB(metricDB metric.MetricDB) (MetricsJSON, error) {
 	return metricJSON, nil
 }
 
+var ErrTypeNotSupport = errors.New("not type support")
+
 func NewMetricDBFromMetricJSON(metricJSON MetricsJSON) (metric.MetricDB, error) {
 	var val metric.Valuer
 
@@ -271,7 +321,7 @@ func NewMetricDBFromMetricJSON(metricJSON MetricsJSON) (metric.MetricDB, error) 
 			val = metric.Gauge(*metricJSON.Value)
 		}
 	default:
-		return metric.MetricDB{}, errors.New("not type support")
+		return metric.MetricDB{}, ErrTypeNotSupport
 	}
 
 	return metric.NewMetricDB(metricJSON.ID, val), nil

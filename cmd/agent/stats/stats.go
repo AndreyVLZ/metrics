@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"context"
 	"runtime"
 
 	m "github.com/AndreyVLZ/metrics/internal/metric"
@@ -125,17 +126,20 @@ func (s *Stats) Total() m.Counter {
 func (s *Stats) ReadToStore(store storage.Storage) error {
 	supportName := metricConst(0).supportName()
 	for i := range supportName {
-		if err := store.Set(
+		_, err := store.Set(
+			context.Background(),
 			m.NewMetricDB(
 				supportName[i],
 				s.Read(metricConst(i)),
 			),
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 	}
 
-	if err := store.Set(m.NewMetricDB("PollCount", s.Total())); err != nil {
+	_, err := store.Set(context.Background(), m.NewMetricDB("PollCount", s.Total()))
+	if err != nil {
 		return err
 	}
 

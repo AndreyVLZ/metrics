@@ -29,7 +29,7 @@ type MetricDB struct {
 	Valuer
 }
 
-type metricJSON struct {
+type Metric struct {
 	ID    string   `json:"id"`              // имя метрики
 	MType string   `json:"type"`            // параметр, принимающий значение gauge или counter
 	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
@@ -38,7 +38,7 @@ type metricJSON struct {
 
 func (m MetricDB) MarshalJSON() ([]byte, error) {
 	type metricAlias MetricDB
-	metricJSON := metricJSON{
+	metricJSON := Metric{
 		ID:    m.Name(),
 		MType: m.Type(),
 	}
@@ -66,7 +66,7 @@ func (m MetricDB) MarshalJSON() ([]byte, error) {
 
 func (m *MetricDB) UnmarshalJSON(data []byte) error {
 	type metricAlias MetricDB
-	metricJSON := metricJSON{}
+	metricJSON := Metric{}
 
 	err := json.Unmarshal(data, &metricJSON)
 	if err != nil {

@@ -1,6 +1,8 @@
 package memstorage
 
 import (
+	"context"
+	"log"
 	"testing"
 
 	"github.com/AndreyVLZ/metrics/internal/metric"
@@ -69,15 +71,19 @@ func TestSetMemStore(t *testing.T) {
 
 	for _, test := range tc {
 		t.Run(test.tName, func(t *testing.T) {
-			assert.Equal(t,
-				New().Set(
-					metric.NewMetricDB(
-						test.metric.name,
-						test.metric.fn(test.metric.valStr),
-					),
+			metricNew, err := New().Set(
+				context.Background(),
+				metric.NewMetricDB(
+					test.metric.name,
+					test.metric.fn(test.metric.valStr),
 				),
-				test.err,
 			)
+			assert.Equal(t, err, test.err)
+			if test.err == nil {
+				log.Printf("metricNew %v\n", metricNew)
+				assert.Equal(t, metricNew.Name(), test.metric.name)
+				assert.Equal(t, metricNew.String(), test.metric.valStr)
+			}
 		})
 	}
 }

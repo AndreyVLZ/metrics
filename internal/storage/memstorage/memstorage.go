@@ -1,12 +1,15 @@
 package memstorage
 
 import (
+	"context"
 	"errors"
 	"sync"
 
 	"github.com/AndreyVLZ/metrics/internal/metric"
-	"github.com/AndreyVLZ/metrics/internal/storage"
 )
+
+type MemStorageConfig struct {
+}
 
 var (
 	ErrNotSupportedType    error = errors.New("not supported type")
@@ -14,12 +17,11 @@ var (
 )
 
 type Repository interface {
-	Set(string, metric.Valuer) error
 	Get(string) (metric.Valuer, error)
+	Set(string, metric.Valuer) error
+	Update(string, metric.Valuer) error
 	List() map[string]metric.Valuer
 }
-
-var _ storage.Storage = MemStorage{}
 
 type MemStorage struct {
 	gRepo Repository
@@ -33,18 +35,80 @@ func New() *MemStorage {
 	}
 }
 
-func (s MemStorage) Set(metricNew metric.MetricDB) error {
+func (s *MemStorage) Open() error { return nil }
+
+func (s *MemStorage) SetBatch(ctx context.Context, arr []metric.MetricDB) error {
+	for i := range arr {
+		_, err := s.Set(ctx, arr[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *MemStorage) UpdateBatch(ctx context.Context, arr []metric.MetricDB) error {
+	for i := range arr {
+		_, err := s.Update(ctx, arr[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s MemStorage) Update(ctx context.Context, metricNew metric.MetricDB) (metric.MetricDB, error) {
 	switch metricNew.Type() {
 	case metric.GaugeType.String():
-		return s.gRepo.Set(metricNew.Name(), metricNew.Valuer)
+		if err := s.gRepo.Update(metricNew.Name(), metricNew.Valuer); err != nil {
+			return metric.MetricDB{}, err
+		}
+		return s.Get(ctx, metricNew)
 	case metric.CounterType.String():
-		return s.cRepo.Set(metricNew.Name(), metricNew.Valuer)
+		if err := s.cRepo.Update(metricNew.Name(), metricNew.Valuer); err != nil {
+			return metric.MetricDB{}, err
+		}
+		return s.Get(ctx, metricNew)
 	default:
-		return ErrNotSupportedType
+		return metric.MetricDB{}, ErrNotSupportedType
 	}
 }
 
-func (s MemStorage) Get(metricNew metric.MetricDB) (metric.MetricDB, error) {
+func (s MemStorage) Set(ctx context.Context, metricNew metric.MetricDB) (metric.MetricDB, error) {
+	switch metricNew.Type() {
+	case metric.GaugeType.String():
+		if err := s.gRepo.Set(metricNew.Name(), metricNew.Valuer); err != nil {
+			return metric.MetricDB{}, err
+		}
+		return s.Get(ctx, metricNew)
+	case metric.CounterType.String():
+		if err := s.cRepo.Set(metricNew.Name(), metricNew.Valuer); err != nil {
+			return metric.MetricDB{}, err
+		}
+		return s.Get(ctx, metricNew)
+	default:
+		return metric.MetricDB{}, ErrNotSupportedType
+	}
+}
+
+func (s MemStorage) set(ctx context.Context, metricNew metric.MetricDB, upSet bool) (metric.MetricDB, error) {
+	switch metricNew.Type() {
+	case metric.GaugeType.String():
+		if err := s.gRepo.Set(metricNew.Name(), metricNew.Valuer); err != nil {
+			return metric.MetricDB{}, err
+		}
+		return s.Get(ctx, metricNew)
+	case metric.CounterType.String():
+		if err := s.cRepo.Set(metricNew.Name(), metricNew.Valuer); err != nil {
+			return metric.MetricDB{}, err
+		}
+		return s.Get(ctx, metricNew)
+	default:
+		return metric.MetricDB{}, ErrNotSupportedType
+	}
+}
+
+func (s MemStorage) Get(ctx context.Context, metricNew metric.MetricDB) (metric.MetricDB, error) {
 	var (
 		val metric.Valuer
 		err error
@@ -70,7 +134,7 @@ func (s MemStorage) Get(metricNew metric.MetricDB) (metric.MetricDB, error) {
 	return metricNew, nil
 }
 
-func (s MemStorage) List() []metric.MetricDB {
+func (s MemStorage) List(context.Context) []metric.MetricDB {
 	cMap := s.cRepo.List()
 	gMap := s.gRepo.List()
 
@@ -87,6 +151,8 @@ func (s MemStorage) List() []metric.MetricDB {
 	return arr
 }
 
+func (s MemStorage) Ping() error { return nil }
+
 // CounterRepo
 var _ Repository = &counterRepo{}
 
@@ -101,6 +167,18 @@ func NewCounterRepo() *counterRepo {
 	}
 }
 
+func (r *counterRepo) Update(name string, val metric.Valuer) error {
+	var valCounter metric.Counter
+	err := val.ReadTo(&valCounter)
+	if err != nil {
+		return err
+	}
+
+	r.set(name, valCounter, true)
+
+	return nil
+}
+
 func (r *counterRepo) Set(name string, val metric.Valuer) error {
 	var valCounter metric.Counter
 	err := val.ReadTo(&valCounter)
@@ -108,23 +186,21 @@ func (r *counterRepo) Set(name string, val metric.Valuer) error {
 		return err
 	}
 
-	return r.set(name, valCounter)
+	r.set(name, valCounter, false)
+	return nil
 }
 
-func (r *counterRepo) set(name string, val metric.Counter) error {
+func (r *counterRepo) set(name string, val metric.Counter, upSet bool) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	valNew := val
-
-	valOld, ok := r.repo[name]
-	if ok {
-		valNew += valOld
+	_, ok := r.repo[name]
+	if ok && upSet {
+		r.repo[name] += val
+		return
 	}
 
-	r.repo[name] = valNew
-
-	return nil
+	r.repo[name] = val
 }
 
 func (r *counterRepo) Get(name string) (metric.Valuer, error) {
@@ -162,6 +238,10 @@ func NewGaugeRepo() *gaugeRepo {
 	}
 }
 
+func (r *gaugeRepo) Update(name string, val metric.Valuer) error {
+	return r.Set(name, val)
+}
+
 func (r *gaugeRepo) Set(name string, val metric.Valuer) error {
 	var valGauge metric.Gauge
 	err := val.ReadTo(&valGauge)
@@ -169,15 +249,15 @@ func (r *gaugeRepo) Set(name string, val metric.Valuer) error {
 		return err
 	}
 
-	return r.set(name, valGauge)
+	r.set(name, valGauge)
+	return nil
 }
 
-func (r *gaugeRepo) set(name string, val metric.Gauge) error {
+func (r *gaugeRepo) set(name string, val metric.Gauge) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
 	r.repo[name] = val
-	return nil
 }
 
 func (r *gaugeRepo) Get(name string) (metric.Valuer, error) {
