@@ -57,6 +57,7 @@ func TestListHandler(t *testing.T) {
 			h(w, request)
 
 			result := w.Result()
+			defer result.Body.Close()
 
 			assert.Equal(t, test.want.statusCode, result.StatusCode)
 			assert.Equal(t, test.want.contentType, result.Header.Get("Content-Type"))
