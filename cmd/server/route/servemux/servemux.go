@@ -64,7 +64,9 @@ func (s *serveMux) setHandlers(mh handlers.Handlers) {
 	s.mux.Handle("/value/",
 		middleware.Methods(
 			middleware.Get(
-				mh.GetValueHandler(),
+				middleware.GzipMiddleware(
+					mh.GetValueHandler().ServeHTTP,
+				),
 			),
 			middleware.Post(
 				middleware.GzipMiddleware(

@@ -91,6 +91,7 @@ func (mh *mainHandlers) PingHandler() http.Handler {
 func (mh *mainHandlers) ListHandler() http.Handler {
 	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
 		w.Header().Set("Content-Type", TextHTMLConst)
+		w.WriteHeader(http.StatusOK)
 		if err := mh.tmpls.ExecuteTemplate(w, "List", mh.store.List(req.Context())); err != nil {
 			return http.StatusInternalServerError, err
 		}
