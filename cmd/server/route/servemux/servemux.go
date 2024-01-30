@@ -34,7 +34,7 @@ func (s *serveMux) setHandlers(mh handlers.Handlers) {
 	s.mux.Handle("/",
 		middleware.Get(
 			middleware.GzipMiddleware(
-				http.HandlerFunc(mh.ListHandler),
+				http.HandlerFunc(mh.ListHandler().ServeHTTP),
 			),
 		),
 	)

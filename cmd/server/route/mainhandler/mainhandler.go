@@ -68,6 +68,7 @@ func (mh *mainHandlers) handlerFunc(fn funcHandle) http.Handler {
 		if err != nil {
 			http.Error(rw, err.Error(), httpStatus)
 		}
+		rw.WriteHeader(httpStatus)
 	})
 }
 
@@ -88,13 +89,14 @@ func (mh *mainHandlers) PingHandler() http.Handler {
 	})
 }
 
-func (mh *mainHandlers) ListHandler(rw http.ResponseWriter, req *http.Request) {
-	rw.Header().Set("Content-Type", TextHTMLConst)
-	rw.WriteHeader(http.StatusOK)
-	err := mh.tmpls.ExecuteTemplate(rw, "List", mh.store.List(req.Context()))
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-	}
+func (mh *mainHandlers) ListHandler() http.Handler {
+	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
+		w.Header().Set("Content-Type", TextHTMLConst)
+		if err := mh.tmpls.ExecuteTemplate(w, "List", mh.store.List(req.Context())); err != nil {
+			return http.StatusInternalServerError, err
+		}
+		return http.StatusOK, nil
+	})
 }
 
 // Парсинг метрики из URL
@@ -105,7 +107,7 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 		rw := responseWriter{w}
 		metricDB, err := mh.EmbedingHandlers.GetMetricDBFromRequest(req)
 		if err != nil {
-			if err.Error() == urlpath.ErrEmptyNameField.Error() {
+			if errors.Is(err, urlpath.ErrEmptyNameField) {
 				return http.StatusNotFound, err
 			}
 			return http.StatusBadRequest, err
@@ -119,12 +121,11 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 		// NOTE
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		err = rw.WriteString(newMetricDB.String())
-		if err != nil {
+		if err = rw.WriteString(newMetricDB.String()); err != nil {
 			return http.StatusNotFound, err
 		}
 
-		return 0, nil
+		return http.StatusOK, nil
 	})
 }
 
@@ -147,14 +148,13 @@ func (mh *mainHandlers) PostValueHandler() http.Handler {
 		}
 
 		w.Header().Set("Content-Type", ApplicationJSONConst)
-		rw.w.WriteHeader(http.StatusOK)
 
 		err = rw.WriteAsJSON(newMetricDB)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		return 0, nil
+		return http.StatusOK, nil
 	})
 }
 
@@ -170,13 +170,12 @@ func (mh *mainHandlers) PostUpdatesHandler() http.Handler {
 		}
 
 		rw.Header().Set("Content-Type", ApplicationJSONConst)
-		rw.WriteHeader(http.StatusOK)
 
 		if err := mh.store.UpdateBatch(req.Context(), metricsDB); err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		return 0, nil
+		return http.StatusOK, nil
 	})
 }
 
@@ -208,14 +207,12 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 	}
 
 	rw.w.Header().Set("Content-Type", ApplicationJSONConst)
-	rw.w.WriteHeader(http.StatusOK)
 
-	err = rw.WriteAsJSON(newMetricDB)
-	if err != nil {
+	if err = rw.WriteAsJSON(newMetricDB); err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 // Парсинг метрики из URL
@@ -223,7 +220,7 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (int, error) {
 	metricDB, err := mh.EmbedingHandlers.GetUpdateMetricDBFromRequest(req)
 	if err != nil {
-		if err.Error() == urlpath.ErrEmptyNameField.Error() {
+		if errors.Is(err, urlpath.ErrEmptyNameField) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusBadRequest, err
@@ -234,7 +231,7 @@ func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (in
 		return http.StatusNotFound, err
 	}
 
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 func metricsFromBoby(body io.ReadCloser) ([]metric.MetricDB, error) {
@@ -260,12 +257,13 @@ func metricsFromBoby(body io.ReadCloser) ([]metric.MetricDB, error) {
 	return metricsDB, nil
 }
 
+var ErrJSONSyntax = errors.New("err json syntax")
+
 func metricFromBoby(body io.ReadCloser) (metric.MetricDB, error) {
 	defer body.Close()
-
 	var metricJSON MetricsJSON
 	if err := json.NewDecoder(body).Decode(&metricJSON); err != nil {
-		return metric.MetricDB{}, err
+		return metric.MetricDB{}, ErrJSONSyntax
 	}
 
 	metricDB, err := NewMetricDBFromMetricJSON(metricJSON)
@@ -302,6 +300,8 @@ func NewMetricJSONFromMetricDB(metricDB metric.MetricDB) (MetricsJSON, error) {
 	return metricJSON, nil
 }
 
+var ErrTypeNotSupport = errors.New("not type support")
+
 func NewMetricDBFromMetricJSON(metricJSON MetricsJSON) (metric.MetricDB, error) {
 	var val metric.Valuer
 
@@ -319,7 +319,7 @@ func NewMetricDBFromMetricJSON(metricJSON MetricsJSON) (metric.MetricDB, error) 
 			val = metric.Gauge(*metricJSON.Value)
 		}
 	default:
-		return metric.MetricDB{}, errors.New("not type support")
+		return metric.MetricDB{}, ErrTypeNotSupport
 	}
 
 	return metric.NewMetricDB(metricJSON.ID, val), nil

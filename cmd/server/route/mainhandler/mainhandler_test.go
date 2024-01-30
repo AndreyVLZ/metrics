@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/urlpath"
@@ -14,56 +15,6 @@ import (
 	"github.com/AndreyVLZ/metrics/internal/storage/memstorage"
 	"github.com/stretchr/testify/assert"
 )
-
-func TestListHandler(t *testing.T) {
-	type want struct {
-		contentType string
-		statusCode  int
-	}
-
-	tc := map[string]struct {
-		tName   string
-		tmpls   *template.Template
-		store   storage.Storage
-		request string
-		want    want
-		rw      http.ResponseWriter
-	}{
-		"positive": {
-			tName: "Get",
-			tmpls: template.Must(template.New("metrics").Parse(tpls)),
-			store: fakeStore{
-				Storage: memstorage.New(),
-			},
-			rw:      httptest.NewRecorder(),
-			request: "/list",
-			want: want{
-				contentType: TextHTMLConst,
-				statusCode:  http.StatusOK,
-			},
-		},
-	}
-
-	for nTest, test := range tc {
-		t.Run(nTest+test.tName, func(t *testing.T) {
-			mh := mainHandlers{
-				tmpls:            test.tmpls,
-				store:            test.store,
-				EmbedingHandlers: nil,
-			}
-			request := httptest.NewRequest(http.MethodGet, test.request, http.NoBody)
-			w := httptest.NewRecorder()
-			h := http.HandlerFunc(mh.ListHandler)
-			h(w, request)
-
-			result := w.Result()
-			defer result.Body.Close()
-
-			assert.Equal(t, test.want.statusCode, result.StatusCode)
-			assert.Equal(t, test.want.contentType, result.Header.Get("Content-Type"))
-		})
-	}
-}
 
 type want struct {
 	contentType string
@@ -114,6 +65,54 @@ func (e fakeEmbed) GetUpdateMetricDBFromRequest(*http.Request) (metric.MetricDB,
 		return metric.MetricDB{}, e.err
 	}
 	return e.metric, nil
+}
+
+func TestListHandler(t *testing.T) {
+	type want struct {
+		contentType string
+		statusCode  int
+	}
+
+	tc := map[string]struct {
+		tName   string
+		tmpls   *template.Template
+		store   storage.Storage
+		request string
+		want    want
+	}{
+		"positive": {
+			tName: "Get",
+			tmpls: template.Must(template.New("metrics").Parse(tpls)),
+			store: fakeStore{
+				Storage: memstorage.New(),
+			},
+			request: "/list",
+			want: want{
+				contentType: TextHTMLConst,
+				statusCode:  http.StatusOK,
+			},
+		},
+	}
+
+	for nTest, test := range tc {
+		t.Run(nTest+test.tName, func(t *testing.T) {
+			mh := mainHandlers{
+				tmpls:            test.tmpls,
+				store:            test.store,
+				EmbedingHandlers: nil,
+			}
+			request := httptest.NewRequest(http.MethodGet, test.request, http.NoBody)
+			w := httptest.NewRecorder()
+			h := http.HandlerFunc(mh.ListHandler().ServeHTTP)
+			h(w, request)
+
+			result := w.Result()
+			defer result.Body.Close()
+
+			assert.Equal(t, test.want.statusCode, result.StatusCode)
+			assert.Equal(t, test.want.contentType, result.Header.Get("Content-Type"))
+		})
+	}
 }
 
 func TestGetValueHandler(t *testing.T) {
@@ -197,6 +196,111 @@ func TestGetValueHandler(t *testing.T) {
 					body, _ := io.ReadAll(result.Body)
 					defer result.Body.Close()
 					assert.Equal(t, test.expBody, string(body))
+				}
+			})
+		}
+	}
+}
+
+func TestPostValueHandler(t *testing.T) {
+	tc := map[string][]struct {
+		tName   string
+		store   storage.Storage
+		want    want
+		inBody  string
+		expBody string
+		err     error
+	}{
+
+		"positive": {
+			{
+				tName:  "#1 [counter]",
+				inBody: `{"id":"myCounter","type":"counter"}`,
+				store: fakeStore{
+					m: metric.NewMetricDB(
+						"myCounter",
+						metric.Counter(1),
+					),
+				},
+				expBody: `{"id":"myCounter","type":"counter","delta":1}
+`,
+				want: want{
+					statusCode:  http.StatusOK,
+					contentType: ApplicationJSONConst,
+				},
+			},
+
+			{
+				tName:  "#2 [gauge]",
+				inBody: `{"id":"myGauge","type":"gauge"}`,
+				store: fakeStore{
+					m: metric.NewMetricDB(
+						"myGauge",
+						metric.Gauge(1.1),
+					),
+				},
+				expBody: `{"id":"myGauge","type":"gauge","value":1.1}
+`,
+				want: want{
+					statusCode:  http.StatusOK,
+					contentType: ApplicationJSONConst,
+				},
+			},
+		},
+
+		"negative": {
+			{
+				tName:   "#1 [in body nil]",
+				inBody:  ``,
+				store:   nil,
+				expBody: ErrJSONSyntax.Error() + "\n",
+				want: want{
+					statusCode:  http.StatusNotFound,
+					contentType: "text/plain; charset=utf-8",
+				},
+			},
+			{
+				tName:   "#2 [err read from body]",
+				inBody:  `{"":}`,
+				store:   nil,
+				expBody: ErrJSONSyntax.Error() + "\n",
+				want: want{
+					statusCode:  http.StatusNotFound,
+					contentType: "text/plain; charset=utf-8",
+				},
+			},
+			{
+				tName:   "#2 [err not type support]",
+				inBody:  `{"id":"myCounter","type":"errType"}`,
+				store:   nil,
+				expBody: ErrTypeNotSupport.Error() + "\n",
+				want: want{
+					statusCode:  http.StatusNotFound,
+					contentType: "text/plain; charset=utf-8",
+				},
+			},
+		},
+	}
+
+	for nTest, tests := range tc {
+		for _, test := range tests {
+			mh := NewMainHandlers(
+				test.store,
+				fakeEmbed{},
+			)
+			t.Run(nTest+" "+test.tName, func(t *testing.T) {
+				request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inBody))
+				w := httptest.NewRecorder()
+				h := http.HandlerFunc(mh.PostValueHandler().ServeHTTP)
+				h(w, request)
+				result := w.Result()
+
+				assert.Equal(t, test.want.statusCode, result.StatusCode)
+				assert.Equal(t, test.want.contentType, result.Header.Get("Content-Type"))
+				if test.expBody != "" {
+					actualBody, _ := io.ReadAll(result.Body)
+					defer result.Body.Close()
+					assert.Equal(t, test.expBody, string(actualBody))
 				}
 			})
 		}

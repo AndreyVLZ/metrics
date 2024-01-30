@@ -47,7 +47,7 @@ func (s *chiMux) setHandlers(mh handlers.Handlers) {
 	)
 
 	s.mux.Route("/", func(r chi.Router) {
-		r.Get("/", mh.ListHandler)
+		r.Get("/", mh.ListHandler().ServeHTTP)
 		r.Route("/update", func(r chi.Router) {
 			r.Post(
 				updateEndPoint,
