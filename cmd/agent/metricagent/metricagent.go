@@ -157,8 +157,7 @@ func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
 
 func (c *MetricClient) sendData(data []byte) error {
 	url := fmt.Sprintf("http://%s/updates/", c.addr)
-	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("err build request: %v", err)
 	}
@@ -180,8 +179,7 @@ func (c *MetricClient) sendData(data []byte) error {
 func retry(attempts int, sleep time.Duration, f func() error) (err error) {
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			log.Printf("Повтор псле ошибки %v\n", err)
-			fmt.Printf("SLEEP %v\n", sleep)
+			log.Printf("Повтор после ошибки %v\n", err)
 			time.Sleep(sleep)
 			sleep += 2 * time.Second
 		}

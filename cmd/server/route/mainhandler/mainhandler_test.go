@@ -2,6 +2,7 @@ package mainhandler
 
 import (
 	"context"
+	"html/template"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-/*
 func TestListHandler(t *testing.T) {
-
 	type want struct {
 		contentType string
 		statusCode  int
@@ -34,7 +33,7 @@ func TestListHandler(t *testing.T) {
 			tName: "Get",
 			tmpls: template.Must(template.New("metrics").Parse(tpls)),
 			store: fakeStore{
-				memstorage.New(),
+				Storage: memstorage.New(),
 			},
 			rw:      httptest.NewRecorder(),
 			request: "/list",
@@ -43,18 +42,6 @@ func TestListHandler(t *testing.T) {
 				statusCode:  http.StatusOK,
 			},
 		},
-			"negative": {
-				tName: "template execute err",
-				tmpls: template.Must(template.New("metrics").Parse(`{{define "Lis"}}{{.typ}}{{end}}`)),
-				store: fakeStoreEmptyList{
-					memstorage.New(),
-				},
-				request: "/list",
-				want: want{
-					contentType: TextHTMLConst,
-					statusCode:  http.StatusInternalServerError,
-				},
-			},
 	}
 
 	for nTest, test := range tc {
@@ -76,7 +63,6 @@ func TestListHandler(t *testing.T) {
 		})
 	}
 }
-*/
 
 type want struct {
 	contentType string

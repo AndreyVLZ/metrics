@@ -2,6 +2,7 @@ package metricserver
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net/http"
@@ -68,20 +69,21 @@ func New(log *slog.Logger, opts ...FuncOpt) (*metricServer, error) {
 		return nil, err
 	}
 
-	// NOTE: убрать middleware в router
 	srv.server.Handler = middleware.Logging(srv.log, router.SetStore(srv.store))
 
 	return srv, nil
 }
 
 func (s *metricServer) Start() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	mainCtx := context.Background()
+	ctx, stop := signal.NotifyContext(mainCtx, os.Interrupt)
 	defer stop()
 
 	// запускаем хранилище
 	err := s.store.Open()
 	if err != nil {
 		s.log.Error("store Open", err)
+		return
 	}
 
 	// запускаем сервисы
@@ -99,7 +101,7 @@ func (s *metricServer) Start() {
 		s.server.Addr, s.cfg.storeInt, s.cfg.storePath, s.cfg.isRestore, s.cfg.dbDNS,
 	)
 
-	servicesStopedCtx, cancelStopped := context.WithCancel(context.Background())
+	servicesStopedCtx, cancelStopped := context.WithCancel(mainCtx)
 	defer cancelStopped()
 
 	// регистрируем функции для остановки
@@ -116,13 +118,13 @@ func (s *metricServer) Start() {
 	// Ждем когда остановятся все сервисы
 	go func() {
 		s.wg.Wait()
-		log.Println("all stopped")
+		s.log.Info("all services stopped")
 		// отменяем контекс для сервисов
 		cancelStopped()
 	}()
 
 	// контекс для отмены на 10сек
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(mainCtx, 10*time.Second)
 	defer cancel()
 
 	if err := s.server.Shutdown(timeoutCtx); err != nil {
@@ -131,7 +133,7 @@ func (s *metricServer) Start() {
 
 	select {
 	case <-timeoutCtx.Done():
-		if timeoutCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
 			s.log.Error("deadline")
 		}
 	case <-servicesStopedCtx.Done():
@@ -149,14 +151,14 @@ func (s *metricServer) registerOnShutdown() {
 
 func (s *metricServer) registerByWG(wg *sync.WaitGroup, service Service) func() {
 	wg.Add(1)
-	log.Printf("regist %v\n", service.Name())
+	s.log.Info("registry service", "name", service.Name())
 	return func() {
+		defer wg.Done()
 		err := service.Stop()
 		if err != nil {
 			s.log.Error("stop service", "name", service.Name(), "err", err)
 		}
 		s.log.Info("stop sevice", "name", service.Name())
-		wg.Done()
 	}
 }
 

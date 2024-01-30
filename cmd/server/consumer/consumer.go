@@ -49,16 +49,5 @@ func (c *Consumer) ReadMetric() ([]metric.MetricDB, error) {
 		arr = append(arr, metricDB)
 	}
 
-	// NOTE:
-	//return reverseArray(arr), nil
 	return arr, nil
-}
-
-func reverseArray(arr []metric.MetricDB) []metric.MetricDB {
-	l := len(arr)
-	for i := 0; i < l/2; i++ {
-		arr[i], arr[l-1-i] = arr[l-1-i], arr[i]
-	}
-
-	return arr
 }

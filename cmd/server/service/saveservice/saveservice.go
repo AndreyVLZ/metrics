@@ -43,7 +43,7 @@ func (ss *saveSevice) start() {
 		select {
 		case <-time.After(time.Duration(ss.storeInt) * time.Second):
 			if err := ss.saved(); err != nil {
-				log.Printf("Err save metrics %v\n", err)
+				log.Printf("err save metrics %v\n", err)
 			}
 		case <-ss.exit:
 			return

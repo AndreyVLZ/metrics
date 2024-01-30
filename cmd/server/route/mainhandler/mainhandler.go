@@ -1,7 +1,6 @@
 package mainhandler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -92,7 +91,7 @@ func (mh *mainHandlers) PingHandler() http.Handler {
 func (mh *mainHandlers) ListHandler(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Content-Type", TextHTMLConst)
 	rw.WriteHeader(http.StatusOK)
-	err := mh.tmpls.ExecuteTemplate(rw, "List", mh.store.List(context.Background()))
+	err := mh.tmpls.ExecuteTemplate(rw, "List", mh.store.List(req.Context()))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 	}
@@ -112,7 +111,7 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 			return http.StatusBadRequest, err
 		}
 
-		newMetricDB, err := mh.store.Get(context.Background(), metricDB)
+		newMetricDB, err := mh.store.Get(req.Context(), metricDB)
 		if err != nil {
 			return http.StatusNotFound, err
 		}
@@ -142,7 +141,7 @@ func (mh *mainHandlers) PostValueHandler() http.Handler {
 			return http.StatusNotFound, err
 		}
 
-		newMetricDB, err := mh.store.Get(context.Background(), metricDB)
+		newMetricDB, err := mh.store.Get(req.Context(), metricDB)
 		if err != nil {
 			return http.StatusNotFound, err
 		}
@@ -173,7 +172,7 @@ func (mh *mainHandlers) PostUpdatesHandler() http.Handler {
 		rw.Header().Set("Content-Type", ApplicationJSONConst)
 		rw.WriteHeader(http.StatusOK)
 
-		if err := mh.store.UpdateBatch(context.Background(), metricsDB); err != nil {
+		if err := mh.store.UpdateBatch(req.Context(), metricsDB); err != nil {
 			return http.StatusBadRequest, err
 		}
 
@@ -203,7 +202,7 @@ func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request)
 		return http.StatusNotFound, err
 	}
 
-	newMetricDB, err := mh.store.Update(context.Background(), metricDB)
+	newMetricDB, err := mh.store.Update(req.Context(), metricDB)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -230,7 +229,7 @@ func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (in
 		return http.StatusBadRequest, err
 	}
 
-	_, err = mh.store.Update(context.Background(), metricDB)
+	_, err = mh.store.Update(req.Context(), metricDB)
 	if err != nil {
 		return http.StatusNotFound, err
 	}
