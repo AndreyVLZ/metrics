@@ -82,7 +82,7 @@ func (s *metricServer) Start() {
 	// запускаем хранилище
 	err := s.store.Open()
 	if err != nil {
-		s.log.Error("store Open", err)
+		s.log.Error("store Open", "err", err)
 		return
 	}
 
@@ -91,14 +91,19 @@ func (s *metricServer) Start() {
 		err := s.services[i].Start()
 		s.log.Info("services Start", "name", s.services[i].Name())
 		if err != nil {
-			s.log.Error("ERR Start services", err, s.services[i].Name())
+			s.log.Error("ERR Start services", s.services[i].Name(), err)
 		}
 	}
 
-	s.log.Info("start server", slog.String("addr", s.server.Addr))
-	log.Printf(
-		"flags: addr[%v] storeInterval[%v] storagePath[%v] restore[%v] dbDNS[%v]",
-		s.server.Addr, s.cfg.storeInt, s.cfg.storePath, s.cfg.isRestore, s.cfg.dbDNS,
+	s.log.LogAttrs(mainCtx,
+		slog.LevelInfo, "start server",
+		slog.String("addr", s.server.Addr),
+		slog.Group("flags",
+			slog.Int("storeInterval", s.cfg.storeInt),
+			slog.String("storePath", s.cfg.storePath),
+			slog.Bool("restore", s.cfg.isRestore),
+			slog.String("dbDNS", s.cfg.dbDNS),
+		),
 	)
 
 	servicesStopedCtx, cancelStopped := context.WithCancel(mainCtx)
@@ -112,7 +117,7 @@ func (s *metricServer) Start() {
 
 	// ловим сигналы выхода
 	<-ctx.Done()
-	log.Println("Ctrl+C")
+	s.log.Info("Ctrl+C")
 	stop()
 
 	// Ждем когда остановятся все сервисы
