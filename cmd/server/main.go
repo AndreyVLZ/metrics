@@ -16,6 +16,7 @@ func main() {
 	storagePathPtr := flag.String("f", "/tmp/metrics-db.json", "полное имя файла, куда сохраняются текущие значения")
 	restorePrt := flag.Bool("r", true, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера ")
 	databaseDNSPtr := flag.String("d", "", "строка с адресом подключения к БД")
+	keyPtr := flag.String("k", "", "ключ")
 	flag.Parse()
 
 	var opts []metricserver.FuncOpt
@@ -25,34 +26,33 @@ func main() {
 		metricserver.SetRestore(*restorePrt),
 		metricserver.SetStorePath(*storagePathPtr),
 		metricserver.SetDatabaseDNS(*databaseDNSPtr),
+		metricserver.SetKey(*keyPtr),
 	)
 
 	if addrENV, ok := os.LookupEnv("ADDRESS"); ok {
 		opts = append(opts, metricserver.SetAddr(addrENV))
 	}
 
-	var ri int
 	if storeIntENV, ok := os.LookupEnv("STORE_INTERVAL"); ok {
-		var err error
-		if ri, err = strconv.Atoi(storeIntENV); err == nil {
+		if ri, err := strconv.Atoi(storeIntENV); err == nil {
 			opts = append(opts, metricserver.SetStoreInt(ri))
 		}
 	}
-	// NOTE проверить на пустое значение
+
 	if storagePathENV, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
 		opts = append(opts, metricserver.SetStorePath(storagePathENV))
 	}
 
 	if restoreENV, ok := os.LookupEnv("RESTORE"); ok {
-		var r bool
-		if restoreENV == "true" {
-			r = true
-		}
-		opts = append(opts, metricserver.SetRestore(r))
+		opts = append(opts, metricserver.SetRestore(restoreENV == "true"))
 	}
 
 	if databaseENV, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		opts = append(opts, metricserver.SetDatabaseDNS(databaseENV))
+	}
+
+	if keyENV, ok := os.LookupEnv("KEY"); ok {
+		opts = append(opts, metricserver.SetKey(keyENV))
 	}
 
 	// объявление логера

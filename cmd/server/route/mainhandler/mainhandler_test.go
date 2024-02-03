@@ -81,15 +81,32 @@ func TestListHandler(t *testing.T) {
 		want    want
 	}{
 		"positive": {
-			tName: "Get",
+			tName: "#1",
+			tmpls: template.Must(template.New("metrics").Parse(tpls)),
+			store: fakeStore{
+				Storage: memstorage.New(),
+				m: metric.NewMetricDB(
+					"MyCounter",
+					metric.Counter(1),
+				),
+			},
+			request: "/",
+			want: want{
+				contentType: TextHTMLConst,
+				statusCode:  http.StatusOK,
+			},
+		},
+
+		"negative": {
+			tName: "err execute html temlate",
 			tmpls: template.Must(template.New("metrics").Parse(tpls)),
 			store: fakeStore{
 				Storage: memstorage.New(),
 			},
-			request: "/list",
+			request: "/",
 			want: want{
-				contentType: TextHTMLConst,
-				statusCode:  http.StatusOK,
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusInternalServerError,
 			},
 		},
 	}
@@ -179,10 +196,8 @@ func TestGetValueHandler(t *testing.T) {
 
 	for nTest, tests := range tc {
 		for _, test := range tests {
-			mh := NewMainHandlers(
-				test.store,
-				test.embed,
-			)
+			mh := New(test.store)
+			mh.EmbedingHandlers = test.embed
 			t.Run(nTest+" "+test.tName, func(t *testing.T) {
 				request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 				w := httptest.NewRecorder()
@@ -284,10 +299,7 @@ func TestPostValueHandler(t *testing.T) {
 
 	for nTest, tests := range tc {
 		for _, test := range tests {
-			mh := NewMainHandlers(
-				test.store,
-				fakeEmbed{},
-			)
+			mh := New(test.store)
 			t.Run(nTest+" "+test.tName, func(t *testing.T) {
 				request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.inBody))
 				w := httptest.NewRecorder()
@@ -306,3 +318,65 @@ func TestPostValueHandler(t *testing.T) {
 		}
 	}
 }
+
+/*
+func TestHandlersList(t *testing.T) {
+	tc := map[string][]struct {
+		tName   string
+		url     string
+		method  string
+		store   storage.Storage
+		want    want
+		inBody  string
+		expBody string
+		err     error
+	}{
+		"positive": {
+			{
+				tName:  "#1",
+				url:    "/",
+				method: http.MethodPost,
+				store: fakeStore{
+					m: metric.NewMetricDB(
+						"myCounter",
+						metric.Counter(1),
+					),
+				},
+			},
+			{
+				tName:  "#2",
+				url:    "/value/",
+				method: http.MethodGet,
+			},
+		},
+	}
+
+	for nTest, tests := range tc {
+		for _, test := range tests {
+			t.Run(nTest+" "+test.tName, func(t *testing.T) {
+				mh := New(test.store)
+				mh.EmbedingHandlers = servemux.NewServeMuxHandle()
+				h := http.HandlerFunc(servemux.New().SetHandlers(mh).ServeHTTP)
+
+				request := httptest.NewRequest(
+					test.method,
+					test.url,
+					strings.NewReader(test.inBody),
+				)
+
+				w := httptest.NewRecorder()
+				h(w, request)
+				result := w.Result()
+
+				assert.Equal(t, test.want.statusCode, result.StatusCode)
+				//assert.Equal(t, test.want.contentType, result.Header.Get("Content-Type"))
+				if test.expBody != "" {
+					actualBody, _ := io.ReadAll(result.Body)
+					defer result.Body.Close()
+					assert.Equal(t, test.expBody, string(actualBody))
+				}
+			})
+		}
+	}
+}
+*/

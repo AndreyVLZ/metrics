@@ -29,7 +29,7 @@ func (h *chiHandle) GetMetricDBFromRequest(req *http.Request) (metric.MetricDB, 
 	return metric.URLParse(
 		getURLPath.Type(),
 		getURLPath.Name(),
-		"",
+		"0",
 	)
 }
 
