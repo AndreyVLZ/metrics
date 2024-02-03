@@ -13,14 +13,16 @@ func main() {
 	addrPtr := flag.String("a", metricagent.AddressDefault, "адрес эндпоинта HTTP-сервера")
 	pollIntervarPtr := flag.Int("p", metricagent.PollIntervalDefault, "частота опроса метрик из пакета runtime")
 	reportIntervarPtr := flag.Int("r", metricagent.ReportIntervalDefault, "частота отправки метрик на сервер")
+	keyPtr := flag.String("k", "", "ключ")
 	flag.Parse()
 
 	opts := []metricagent.FuncOpt{}
-	fAddr := metricagent.SetAddr(*addrPtr)
-	fPollInt := metricagent.SetPollInterval(*pollIntervarPtr)
-	fReportInt := metricagent.SetReportInterval(*reportIntervarPtr)
-
-	opts = append(opts, fAddr, fPollInt, fReportInt)
+	opts = append(opts,
+		metricagent.SetAddr(*addrPtr),
+		metricagent.SetPollInterval(*pollIntervarPtr),
+		metricagent.SetReportInterval(*reportIntervarPtr),
+		metricagent.SetKey(*keyPtr),
+	)
 
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		opts = append(opts, metricagent.SetAddr(v))
@@ -36,6 +38,10 @@ func main() {
 		if pi, err := strconv.Atoi(v); err == nil {
 			opts = append(opts, metricagent.SetPollInterval(pi))
 		}
+	}
+
+	if keyENV, ok := os.LookupEnv("KEY"); ok {
+		opts = append(opts, metricagent.SetKey(keyENV))
 	}
 
 	client := metricagent.New(opts...)

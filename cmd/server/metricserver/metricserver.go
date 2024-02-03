@@ -13,7 +13,6 @@ import (
 
 	"github.com/AndreyVLZ/metrics/cmd/server/producer"
 	"github.com/AndreyVLZ/metrics/cmd/server/route"
-	"github.com/AndreyVLZ/metrics/cmd/server/route/middleware"
 	"github.com/AndreyVLZ/metrics/cmd/server/service/restoreservice"
 	"github.com/AndreyVLZ/metrics/cmd/server/service/saveservice"
 	"github.com/AndreyVLZ/metrics/cmd/server/wrapstore"
@@ -34,6 +33,7 @@ type ServerConfig struct {
 	storePath   string
 	isRestore   bool
 	storeInt    int //при старте
+	key         string
 }
 
 type metricServer struct {
@@ -64,12 +64,18 @@ func New(log *slog.Logger, opts ...FuncOpt) (*metricServer, error) {
 	// добавляет сервисы и меняет store
 	srv.configureServices()
 
-	router, err := route.New(route.Config{RouteType: route.RouteTypeServeMux})
+	router, err := route.New(route.Config{
+		RouteType: route.RouteTypeServeMux,
+		//RouteType: route.RouteTypeChi,
+		Store:     srv.store,
+		Log:       srv.log,
+		SecretKey: srv.cfg.key,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	srv.server.Handler = middleware.Logging(srv.log, router.SetStore(srv.store))
+	srv.server.Handler = router
 
 	return srv, nil
 }
@@ -83,7 +89,7 @@ func (s *metricServer) Start() {
 	err := s.store.Open()
 	if err != nil {
 		s.log.Error("store Open", "err", err)
-		return
+		//return
 	}
 
 	// запускаем сервисы
@@ -103,6 +109,7 @@ func (s *metricServer) Start() {
 			slog.String("storePath", s.cfg.storePath),
 			slog.Bool("restore", s.cfg.isRestore),
 			slog.String("dbDNS", s.cfg.dbDNS),
+			slog.String("key", s.cfg.key),
 		),
 	)
 
@@ -252,5 +259,11 @@ func SetRestore(b bool) FuncOpt {
 func SetDatabaseDNS(dns string) FuncOpt {
 	return func(s *metricServer) {
 		s.cfg.dbDNS = dns
+	}
+}
+
+func SetKey(key string) FuncOpt {
+	return func(s *metricServer) {
+		s.cfg.key = key
 	}
 }

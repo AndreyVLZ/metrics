@@ -3,7 +3,11 @@ package metricagent
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -26,32 +30,14 @@ const (
 
 type FuncOpt func(c *MetricClient)
 
-func SetAddr(addr string) FuncOpt {
-	return func(c *MetricClient) {
-		c.addr = addr
-	}
-}
-
-func SetPollInterval(pollInterval int) FuncOpt {
-	return func(c *MetricClient) {
-		c.pollInterval = pollInterval
-	}
-}
-
-func SetReportInterval(reportInterval int) FuncOpt {
-	return func(c *MetricClient) {
-		c.reportInterval = reportInterval
-	}
-}
-
 type MetricClient struct {
 	stats          stats.Stats
 	store          storage.Storage
+	client         *http.Client
 	addr           string
 	pollInterval   int
 	reportInterval int
-	client         *http.Client
-	exit           chan (struct{})
+	key            string
 }
 
 func New(opts ...FuncOpt) *MetricClient {
@@ -73,7 +59,10 @@ func New(opts ...FuncOpt) *MetricClient {
 
 // Start запускет агент
 func (c *MetricClient) Start() error {
-	log.Printf("start agent: %s %v %v\n", c.addr, c.pollInterval, c.reportInterval)
+	log.Printf(
+		"start agent: addr[%s] poolInt[%d] reportInt[%d] key[%s]\n",
+		c.addr, c.pollInterval, c.reportInterval, c.key,
+	)
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -118,20 +107,17 @@ func (c *MetricClient) randomValueUpdate() error {
 // SendMetrics Чтение и отправка всех сохраненых метрик
 func (c *MetricClient) SendMetrics(wg *sync.WaitGroup) {
 	var err error
-
 	for {
-		select {
-		case <-time.After(time.Duration(c.reportInterval) * time.Second):
-			metrics := c.store.List(context.Background())
-			err = c.SendBatch(metrics)
-			if err != nil {
-				log.Printf("err send batch metrics> %v\n", err)
-				c.exit <- struct{}{}
-			}
-		case <-c.exit:
-			wg.Done()
+		<-time.After(time.Duration(c.reportInterval) * time.Second)
+		metrics := c.store.List(context.Background())
+		//c.Send2(metrics)
+		err = c.SendBatch(metrics)
+		if err != nil {
+			log.Printf("err send batch metrics> %v\n", err)
+			break
 		}
 	}
+	wg.Done()
 }
 
 func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
@@ -150,19 +136,37 @@ func (c *MetricClient) SendBatch(metrics []metric.MetricDB) error {
 		return err
 	}
 
-	return retry(4, time.Second, func() error {
-		return c.sendData(JSON)
+	return retry(3, time.Second, func() error {
+		return c.sendData("updates", JSON)
 	})
 }
 
-func (c *MetricClient) sendData(data []byte) error {
-	url := fmt.Sprintf("http://%s/updates/", c.addr)
+func hash(data []byte, key []byte) ([]byte, error) {
+	h := hmac.New(sha256.New, key)
+	_, err := h.Write(data)
+	if err != nil {
+		return nil, errors.New("err hash")
+	}
+
+	sum := h.Sum(nil)
+	return sum, nil
+}
+
+func (c *MetricClient) sendData(endPoint string, data []byte) error {
+	url := fmt.Sprintf("http://%s/%s/", c.addr, endPoint)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("err build request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	if len(data) != 0 {
+		sum, err := hash(data, []byte(c.key))
+		if err == nil {
+			_ = sum
+			req.Header.Set("HashSHA256", hex.EncodeToString(sum))
+		}
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -177,9 +181,9 @@ func (c *MetricClient) sendData(data []byte) error {
 }
 
 func retry(attempts int, sleep time.Duration, f func() error) (err error) {
-	for i := 0; i < attempts; i++ {
+	for i := 0; i <= attempts; i++ {
 		if i > 0 {
-			log.Printf("Повтор после ошибки %v\n", err)
+			log.Printf("Повтор [%d] после ошибки %v\n", i, err)
 			time.Sleep(sleep)
 			sleep += 2 * time.Second
 		}
@@ -193,8 +197,16 @@ func retry(attempts int, sleep time.Duration, f func() error) (err error) {
 	return fmt.Errorf("попыток %d, error: %s", attempts, err)
 }
 
-func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
+func (c *MetricClient) Send2(metrics []metric.MetricDB) {
+	for i := range metrics {
+		err := c.SendMetricPost(metrics[i])
+		if err != nil {
+			fmt.Printf("errSendOne %v\n", err)
+		}
+	}
+}
 
+func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
 	metricJSON, err := mainhandler.NewMetricJSONFromMetricDB(metric)
 	if err != nil {
 		return err
@@ -204,20 +216,29 @@ func (c *MetricClient) SendMetricPost(metric metric.MetricDB) error {
 	if err != nil {
 		return err
 	}
-	return c.sendData(data)
+	return c.sendData("update", data)
 }
 
-// SendMetric Оправка метрики агентом на сервер по адресу
-func (c *MetricClient) SendMetric(metric metric.MetricDB) error {
-	url := fmt.Sprintf(
-		"http://%s/update/%s/%s/%s",
-		c.addr, metric.Type(), metric.Name(), metric.Valuer.String())
-
-	res, err := c.client.Post(url, "text/plain", http.NoBody)
-	if err != nil {
-		return err
+func SetAddr(addr string) FuncOpt {
+	return func(c *MetricClient) {
+		c.addr = addr
 	}
-	defer res.Body.Close()
+}
 
-	return nil
+func SetPollInterval(pollInterval int) FuncOpt {
+	return func(c *MetricClient) {
+		c.pollInterval = pollInterval
+	}
+}
+
+func SetReportInterval(reportInterval int) FuncOpt {
+	return func(c *MetricClient) {
+		c.reportInterval = reportInterval
+	}
+}
+
+func SetKey(key string) FuncOpt {
+	return func(c *MetricClient) {
+		c.key = key
+	}
 }

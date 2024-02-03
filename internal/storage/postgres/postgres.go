@@ -92,7 +92,6 @@ func (store *Postgres) Open() error {
 	store.db = db
 
 	return store.createTable()
-
 }
 
 func (store *Postgres) Ping() error {
