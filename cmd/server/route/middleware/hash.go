@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"io"
 	"net/http"
 )
@@ -52,8 +51,7 @@ func Hash(key string, next http.Handler) http.HandlerFunc {
 				return
 			}
 
-			b1 := ValidMAC(sha, bodyByte, []byte(key))
-			if !b1 {
+			if isValid, err := validMAC(sha, bodyByte, []byte(key)); err != nil && !isValid {
 				http.Error(rw, "internal errpr", http.StatusInternalServerError)
 				return
 			}
@@ -72,21 +70,25 @@ func Hash(key string, next http.Handler) http.HandlerFunc {
 	}
 }
 
-func ValidMAC(messageMACStr string, message, key []byte) bool {
-	mac := hmac.New(sha256.New, key)
-	mac.Write(message)
-	expectedMAC := mac.Sum(nil)
+func validMAC(messageMACStr string, message, key []byte) (bool, error) {
+	expectedMAC, err := hash(message, key)
+	if err != nil {
+		return false, err
+	}
+
 	messageMAC, err := hex.DecodeString(messageMACStr)
 	if err != nil {
+		return false, err
 	}
-	return hmac.Equal(messageMAC, expectedMAC)
+
+	return hmac.Equal(messageMAC, expectedMAC), nil
 }
 
 func hash(data []byte, key []byte) ([]byte, error) {
 	h := hmac.New(sha256.New, key)
 	_, err := h.Write(data)
 	if err != nil {
-		return nil, errors.New("err hash")
+		return nil, err
 	}
 
 	sum := h.Sum(nil)
