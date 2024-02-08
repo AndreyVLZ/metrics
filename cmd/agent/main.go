@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"log"
 	"os"
 	"strconv"
 
@@ -14,6 +13,7 @@ func main() {
 	pollIntervarPtr := flag.Int("p", metricagent.PollIntervalDefault, "частота опроса метрик из пакета runtime")
 	reportIntervarPtr := flag.Int("r", metricagent.ReportIntervalDefault, "частота отправки метрик на сервер")
 	keyPtr := flag.String("k", "", "ключ")
+	rateLimitPtr := flag.Int("l", 1, "количество одновременно исходящих запросов на сервер")
 	flag.Parse()
 
 	opts := []metricagent.FuncOpt{}
@@ -22,6 +22,7 @@ func main() {
 		metricagent.SetPollInterval(*pollIntervarPtr),
 		metricagent.SetReportInterval(*reportIntervarPtr),
 		metricagent.SetKey(*keyPtr),
+		metricagent.SetRateLimit(*rateLimitPtr),
 	)
 
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
@@ -44,10 +45,13 @@ func main() {
 		opts = append(opts, metricagent.SetKey(keyENV))
 	}
 
+	if rateLimitStr, ok := os.LookupEnv("RATE_LIMIT"); ok {
+		if rateLimitInt, err := strconv.Atoi(rateLimitStr); err == nil {
+			opts = append(opts, metricagent.SetRateLimit(rateLimitInt))
+		}
+	}
+
 	client := metricagent.New(opts...)
 
-	err := client.Start()
-	if err != nil {
-		log.Panicf("err: %v\n", err)
-	}
+	client.Start()
 }

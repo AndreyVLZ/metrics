@@ -23,10 +23,11 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 	return c.zw.Write(p)
 }
 
+/*
 func (c *compressWriter) WriteHeader(statusCode int) {
-	c.Header().Set("Content-Encoding", "gzip")
 	c.ResponseWriter.WriteHeader(statusCode)
 }
+*/
 
 func (c *compressWriter) Close() error {
 	return c.zw.Close()
@@ -70,10 +71,10 @@ func Gzip(h http.HandlerFunc) http.HandlerFunc {
 		acceptEncoding := r.Header.Get("Accept-Encoding")
 		supportsGzip := strings.Contains(acceptEncoding, "gzip")
 		if supportsGzip {
+			// устанавливаем заголовок
+			w.Header().Set("Content-Encoding", "gzip")
 			// оборачиваем оригинальный http.ResponseWriter новым с поддержкой сжатия
 			cw := newCompressWriter(w)
-			//cw.ResponseWriter.Header().Set("Content-Encoding", "gzip")
-
 			// меняем оригинальный http.ResponseWriter на новый
 			ow = cw
 			// не забываем отправить клиенту все сжатые данные после завершения middleware

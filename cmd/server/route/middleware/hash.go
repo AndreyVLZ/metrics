@@ -3,10 +3,11 @@ package middleware
 import (
 	"bytes"
 	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"net/http"
+
+	"github.com/AndreyVLZ/metrics/internal/hash"
 )
 
 type hashWriter struct {
@@ -42,6 +43,14 @@ type myReaderCloser struct {
 
 func Hash(key string, next http.Handler) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
+		// Выходим если key не задан
+		if key == "" {
+			// передаём управление хендлеру
+			next.ServeHTTP(rw, req)
+			return
+		}
+
+		// Если установлен Header проверяем MAC
 		sha := req.Header.Get("HashSHA256")
 		if sha != "" {
 			bodyByte, err := io.ReadAll(req.Body)
@@ -58,9 +67,14 @@ func Hash(key string, next http.Handler) http.HandlerFunc {
 		}
 
 		hw := newHashWriter(rw)
+		// меняем оригинальный http.ResponseWriter на новый
+
+		// передаём управление хендлеру
 		next.ServeHTTP(hw, req)
+
+		// Вычисляет хеш и и передавает его в HTTP-заголовке
 		if hw.buf.Len() > 0 && hw.status < 300 {
-			sum, err := hash(hw.buf.Bytes(), []byte(key))
+			sum, err := hash.SHA256(hw.buf.Bytes(), []byte(key))
 			if err == nil {
 				hw.Header().Set("HashSHA256", hex.EncodeToString(sum))
 			}
@@ -71,7 +85,7 @@ func Hash(key string, next http.Handler) http.HandlerFunc {
 }
 
 func validMAC(messageMACStr string, message, key []byte) (bool, error) {
-	expectedMAC, err := hash(message, key)
+	expectedMAC, err := hash.SHA256(message, key)
 	if err != nil {
 		return false, err
 	}
@@ -82,15 +96,4 @@ func validMAC(messageMACStr string, message, key []byte) (bool, error) {
 	}
 
 	return hmac.Equal(messageMAC, expectedMAC), nil
-}
-
-func hash(data []byte, key []byte) ([]byte, error) {
-	h := hmac.New(sha256.New, key)
-	_, err := h.Write(data)
-	if err != nil {
-		return nil, err
-	}
-
-	sum := h.Sum(nil)
-	return sum, nil
 }
