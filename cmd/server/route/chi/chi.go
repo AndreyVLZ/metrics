@@ -33,13 +33,11 @@ func (s *chiMux) SetHandlers(mh handlers.Handlers) http.Handler {
 		"/{%s}/{%s}",
 		TypeChiConst, NameChiConst,
 	)
-	_ = updateEndPoint
+
 	s.mux.Route("/", func(r chi.Router) {
 		r.Get("/", mh.ListHandler().ServeHTTP)
 
 		r.Get("/ping", mh.PingHandler().ServeHTTP)
-
-		//r.Post("/update/", mh.PostUpdateHandler().ServeHTTP)
 
 		r.Post("/updates/", mh.PostUpdatesHandler().ServeHTTP)
 

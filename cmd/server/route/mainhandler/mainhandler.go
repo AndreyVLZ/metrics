@@ -74,7 +74,6 @@ func (mh *mainHandlers) ListHandler() http.Handler {
 			return
 		}
 		rw.Header().Set("Content-Type", TextHTMLConst)
-		//rw.WriteHeader(http.StatusAccepted)
 		buf.WriteTo(rw)
 	})
 }

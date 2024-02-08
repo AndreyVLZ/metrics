@@ -8,8 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-//var _ mainhandler.EmbedingHandlers = &chiHandle{}
-
 type chiHandle struct{}
 
 func NewChiHandle() *chiHandle {

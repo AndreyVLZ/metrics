@@ -23,12 +23,6 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 	return c.zw.Write(p)
 }
 
-/*
-func (c *compressWriter) WriteHeader(statusCode int) {
-	c.ResponseWriter.WriteHeader(statusCode)
-}
-*/
-
 func (c *compressWriter) Close() error {
 	return c.zw.Close()
 }
