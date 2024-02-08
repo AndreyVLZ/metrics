@@ -67,7 +67,6 @@ func Hash(key string, next http.Handler) http.HandlerFunc {
 		}
 
 		hw := newHashWriter(rw)
-		// меняем оригинальный http.ResponseWriter на новый
 
 		// передаём управление хендлеру
 		next.ServeHTTP(hw, req)
