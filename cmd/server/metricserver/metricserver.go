@@ -19,6 +19,13 @@ import (
 	"github.com/AndreyVLZ/metrics/internal/storage"
 )
 
+const (
+	AddressDefault       string = "localhost:8080"
+	StoreIntervalDefault int    = 300
+	StoragePathDefault   string = "/tmp/metrics-db.json"
+	IsRestore            bool   = true
+)
+
 type FuncOpt func(*metricServer)
 
 type Service interface {

@@ -27,6 +27,7 @@ const (
 	AddressDefault        = "localhost:8080"
 	PollIntervalDefault   = 2
 	ReportIntervalDefault = 10
+	RateLimitDefault      = 3
 )
 
 const numJobs int = 2 // runtime && gopsutil
@@ -180,6 +181,8 @@ func (c *MetricClient) Start() {
 	defer cancel()
 
 	// Канал с ошибками для Task-ов и SendBatch
+	// все Task-и (3шт) + все worker-ы [rateLimit] пишут в errc
+	//errc := make(chan error, len(tasks)+c.rateLimit)
 	errc := make(chan error, 1)
 
 	// Запускаем все задачи
