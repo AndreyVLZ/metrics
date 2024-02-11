@@ -99,9 +99,6 @@ func (mh *mainHandlers) GetValueHandler() http.Handler {
 			return
 		}
 
-		h1, _ := hash([]byte(newMetricDB.String()), []byte("test"))
-		_ = h1
-
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if _, err = rw.Write([]byte(newMetricDB.String())); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)

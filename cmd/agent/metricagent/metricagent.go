@@ -31,7 +31,7 @@ const (
 
 const numJobs int = 2 // runtime && gopsutil
 
-var ErrRetryCancel = errors.New("retry cancel")
+var ErrCancel = errors.New("cancel")
 
 type MetricClient struct {
 	stats          stats.Stats
@@ -61,14 +61,24 @@ func New(opts ...FuncOpt) *MetricClient {
 	return agent
 }
 
-func workerPoll(ctx context.Context, rateLimit int, jobs <-chan []metric.MetricDB, errc chan<- error, fn func(context.Context, []metric.MetricDB) error) {
-	wgCtx, cancel := context.WithCancel(ctx)
+type errWorker struct {
+	id  int
+	err error
+}
+
+func (et errWorker) Unwrap() error { return et.err }
+
+func (et errWorker) Error() string {
+	return fmt.Sprintf("worker [%d] - %s", et.id, et.err)
+}
+
+func workerPoll(ctx context.Context, rateLimit int, jobs <-chan []metric.MetricDB, errc chan<- error, fn func(context.Context, []metric.MetricDB) error) <-chan struct{} {
+	exit := make(chan struct{}, 1)
 	var wg sync.WaitGroup
 
 	go func() {
 		wg.Wait()
-		log.Println("all workers stoped")
-		cancel()
+		exit <- struct{}{}
 	}()
 
 	for id := 1; id <= rateLimit; id++ {
@@ -77,21 +87,30 @@ func workerPoll(ctx context.Context, rateLimit int, jobs <-chan []metric.MetricD
 		go func(id int) {
 			defer func() {
 				wg.Done()
-				log.Printf("worker [%d] stop\n", id)
 			}()
 
 			for batch := range jobs {
-				if err := fn(wgCtx, batch); err != nil {
-					if !errors.Is(err, ErrRetryCancel) {
-						cancel()
-						errc <- err
-					}
+				if err := fn(ctx, batch); err != nil {
+					errc <- &errWorker{id: id, err: err}
 					return
 				}
 			}
 		}(id)
 	}
+
+	return exit
 }
+
+type errTask struct {
+	name string
+	err  error
+}
+
+func (et errTask) Error() string {
+	return fmt.Sprintf("task [%s] - %s", et.name, et.err)
+}
+
+func (et errTask) Unwrap() error { return et.err }
 
 type task struct {
 	name    string
@@ -105,12 +124,10 @@ func (t *task) run(ctx context.Context) error {
 		case <-time.After(t.duraton):
 			err := t.fn()
 			if err != nil {
-				log.Printf("err %v[%v]\n", err, t.name)
-				return err
+				return &errTask{name: t.name, err: err}
 			}
 		case <-ctx.Done():
-			log.Printf("exit %v\n", t.name)
-			return nil
+			return &errTask{name: t.name, err: ErrCancel}
 		}
 	}
 }
@@ -124,9 +141,7 @@ func (c *MetricClient) Start() {
 
 	mainCtx := context.Background()
 
-	chBatch := make(chan []metric.MetricDB, 2)
-	// Канал с ошибками для Task-ов и SendBatch
-	errc := make(chan error, 1)
+	chBatch := make(chan []metric.MetricDB, numJobs)
 
 	// Создаем список задач для агента
 	tasks := []task{
@@ -164,6 +179,9 @@ func (c *MetricClient) Start() {
 	ctx, cancel := context.WithCancel(mainCtx)
 	defer cancel()
 
+	// Канал с ошибками для Task-ов и SendBatch
+	errc := make(chan error, 1)
+
 	// Запускаем все задачи
 	var wg sync.WaitGroup
 	for i := range tasks {
@@ -176,21 +194,35 @@ func (c *MetricClient) Start() {
 		}(tasks[i])
 	}
 
-	workerPoll(ctx, c.rateLimit, chBatch, errc, c.SendBatch)
+	wpExit := workerPoll(ctx, c.rateLimit, chBatch, errc, c.SendBatch)
 
-	// Отменяем все задачи если произошла ошибка
-	if err := <-errc; err != nil {
-		log.Printf("err %v\n", err)
-		cancel()
-	}
-
-	func() {
-		// Ждем когда завершатся все Task-и
-		wg.Wait()
-		// Закрываем все каналы
-		close(chBatch)
-		close(errc)
+	// Читаем из канала все ошибки
+	go func() {
+		for err := range errc {
+			log.Println(err)
+			if !errors.Is(err, ErrCancel) {
+				// Отменяем все задачи если Task или Worker завершился с ошибкой
+				cancel()
+			}
+		}
 	}()
+
+	// дожидаемся остановки писателей [Task]
+	wg.Wait()
+	log.Println("all task stop")
+
+	// закрываем один из каналов в который они писали
+	close(chBatch)
+
+	// дожидаемся остановки читалей из chBatch [workerPoll]
+	<-wpExit
+	log.Println("workerPoll stop")
+
+	time.Sleep(1 * time.Second) // пауза для чтения всех ошибок
+
+	// Все писатели в errc [Tasks,WorkerPoll] завершили работу
+	// закрываем канал errc
+	close(errc)
 }
 
 func (c *MetricClient) updateAllMetrics() error {
@@ -240,7 +272,9 @@ func (c *MetricClient) sendData(ctx context.Context, endPoint string, data []byt
 	req.Header.Set("Content-Type", "application/json")
 	if len(data) != 0 {
 		sum, err := hash.SHA256(data, []byte(c.key))
-		if err == nil {
+		if err != nil {
+			log.Printf("err %v\n", err)
+		} else {
 			req.Header.Set("HashSHA256", hex.EncodeToString(sum))
 		}
 	}
@@ -264,7 +298,7 @@ func retry(ctx context.Context, attempts int, sleep time.Duration, f func() erro
 
 			select {
 			case <-ctx.Done():
-				return ErrRetryCancel
+				return ErrCancel
 			case <-time.After(sleep):
 				sleep += 2 * time.Second
 			}

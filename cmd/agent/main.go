@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"os"
 	"strconv"
 
@@ -30,14 +31,20 @@ func main() {
 	}
 
 	if v, ok := os.LookupEnv("REPORT_INTERVAL"); ok {
-		if ri, err := strconv.Atoi(v); err == nil {
+		ri, err := strconv.Atoi(v)
+		if err == nil {
 			opts = append(opts, metricagent.SetReportInterval(ri))
+		} else {
+			log.Printf("incorrect env REPORT_INTERVAL")
 		}
 	}
 
 	if v, ok := os.LookupEnv("POLL_INTERVAL"); ok {
-		if pi, err := strconv.Atoi(v); err == nil {
+		pi, err := strconv.Atoi(v)
+		if err == nil {
 			opts = append(opts, metricagent.SetPollInterval(pi))
+		} else {
+			log.Printf("incorrect env POLL_INTERVAL")
 		}
 	}
 
@@ -46,8 +53,11 @@ func main() {
 	}
 
 	if rateLimitStr, ok := os.LookupEnv("RATE_LIMIT"); ok {
-		if rateLimitInt, err := strconv.Atoi(rateLimitStr); err == nil {
+		rateLimitInt, err := strconv.Atoi(rateLimitStr)
+		if err == nil {
 			opts = append(opts, metricagent.SetRateLimit(rateLimitInt))
+		} else {
+			log.Printf("incorrect env RATE_LIMIT")
 		}
 	}
 
