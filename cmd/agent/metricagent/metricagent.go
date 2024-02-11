@@ -181,8 +181,6 @@ func (c *MetricClient) Start() {
 	defer cancel()
 
 	// Канал с ошибками для Task-ов и SendBatch
-	// все Task-и (3шт) + все worker-ы [rateLimit] пишут в errc
-	//errc := make(chan error, len(tasks)+c.rateLimit)
 	errc := make(chan error, 1)
 
 	// Запускаем все задачи
