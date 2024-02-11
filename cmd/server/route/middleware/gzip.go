@@ -8,30 +8,21 @@ import (
 )
 
 type compressWriter struct {
-	w  http.ResponseWriter
+	http.ResponseWriter
 	zw *gzip.Writer
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	return &compressWriter{
-		w:  w,
-		zw: gzip.NewWriter(w),
+		ResponseWriter: w,
+		zw:             gzip.NewWriter(w),
 	}
-}
-func (c *compressWriter) Header() http.Header {
-	return c.w.Header()
 }
 
 func (c *compressWriter) Write(p []byte) (int, error) {
 	return c.zw.Write(p)
 }
 
-func (c *compressWriter) WriteHeader(statusCode int) {
-	if statusCode < 300 {
-		c.w.Header().Set("Content-Encoding", "gzip")
-	}
-	c.w.WriteHeader(statusCode)
-}
 func (c *compressWriter) Close() error {
 	return c.zw.Close()
 }
@@ -63,7 +54,8 @@ func (c *compressReader) Close() error {
 	}
 	return c.zr.Close()
 }
-func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
+
+func Gzip(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
 		// который будем передавать следующей функции
@@ -73,6 +65,8 @@ func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 		acceptEncoding := r.Header.Get("Accept-Encoding")
 		supportsGzip := strings.Contains(acceptEncoding, "gzip")
 		if supportsGzip {
+			// устанавливаем заголовок
+			w.Header().Set("Content-Encoding", "gzip")
 			// оборачиваем оригинальный http.ResponseWriter новым с поддержкой сжатия
 			cw := newCompressWriter(w)
 			// меняем оригинальный http.ResponseWriter на новый

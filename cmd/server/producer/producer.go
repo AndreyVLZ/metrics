@@ -32,20 +32,8 @@ func (p *Producer) Open() error {
 	return nil
 }
 
-func NewProducer(filename string) (*Producer, error) {
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Producer{
-		fileName: filename,
-		file:     file,
-		writer:   bufio.NewWriter(file),
-	}, nil
-}
-
-func (p *Producer) Trunc() error {
+/*
+func (p *Producer) Trunc1() error {
 	if p.file != nil {
 		if err := p.Close(); err != nil {
 			return err
@@ -56,9 +44,15 @@ func (p *Producer) Trunc() error {
 	if err != nil {
 		return err
 	}
+
 	p.file = file
 	p.writer = bufio.NewWriter(file)
 	return nil
+}
+*/
+
+func (p *Producer) Trunc() error {
+	return p.file.Truncate(0)
 }
 
 func (p *Producer) WriteMetric(metricDB *metric.MetricDB) error {
@@ -79,6 +73,7 @@ func (p *Producer) WriteMetric(metricDB *metric.MetricDB) error {
 
 	// записываем буфер в файл
 	return p.writer.Flush()
+	//return nil
 }
 
 func (p *Producer) Close() error {

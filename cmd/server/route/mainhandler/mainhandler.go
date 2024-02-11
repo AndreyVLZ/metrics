@@ -1,6 +1,9 @@
 package mainhandler
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -25,6 +28,7 @@ const tpls = `
 	<head>
 		<meta charset="UTF-8">
 		<title>RunTime Metrics</title>
+	<link rel="shortcut icon" href="http://www.example.com/my_empty_resource"/>
 	</head>
 	<body>
 	<ol type="1">
@@ -33,8 +37,7 @@ const tpls = `
 	{{ end }}
 	</ol>
 	</body>
-</html>
-{{end}}`
+</html>{{end}}`
 
 type EmbedingHandlers interface {
 	GetMetricDBFromRequest(*http.Request) (metric.MetricDB, error)
@@ -46,56 +49,32 @@ type mainHandlers struct {
 	store storage.Storage
 	EmbedingHandlers
 }
-type responseWriter struct {
-	w http.ResponseWriter
-}
 
-func (rw *responseWriter) WriteString(dataStr string) error {
-	_, err := rw.w.Write([]byte(dataStr))
-
-	return err
-}
-
-func (rw *responseWriter) WriteAsJSON(newMetricDB metric.MetricDB) error {
-	return json.NewEncoder(rw.w).Encode(newMetricDB)
-}
-
-type funcHandle func(http.ResponseWriter, *http.Request) (int, error)
-
-func (mh *mainHandlers) handlerFunc(fn funcHandle) http.Handler {
-	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		httpStatus, err := fn(rw, req)
-		if err != nil {
-			http.Error(rw, err.Error(), httpStatus)
-		}
-	})
-}
-
-func NewMainHandlers(store storage.Storage, embHandlers EmbedingHandlers) *mainHandlers {
+func New(store storage.Storage) *mainHandlers {
 	return &mainHandlers{
-		tmpls:            template.Must(template.New("metrics").Parse(tpls)),
-		store:            store,
-		EmbedingHandlers: embHandlers,
+		tmpls: template.Must(template.New("metrics").Parse(tpls)),
+		store: store,
 	}
 }
 
 func (mh *mainHandlers) PingHandler() http.Handler {
-	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if err := mh.store.Ping(); err != nil {
-			return http.StatusInternalServerError, err
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		return 0, nil
 	})
 }
 
 func (mh *mainHandlers) ListHandler() http.Handler {
-	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
-		w.Header().Set("Content-Type", TextHTMLConst)
-		w.WriteHeader(http.StatusOK)
-		if err := mh.tmpls.ExecuteTemplate(w, "List", mh.store.List(req.Context())); err != nil {
-			return http.StatusInternalServerError, err
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		var buf bytes.Buffer
+		if err := mh.tmpls.ExecuteTemplate(&buf, "List", mh.store.List(req.Context())); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		return 0, nil
+		rw.Header().Set("Content-Type", TextHTMLConst)
+		buf.WriteTo(rw)
 	})
 }
 
@@ -103,68 +82,72 @@ func (mh *mainHandlers) ListHandler() http.Handler {
 // Чтение метрики из хранилища
 // Запись метрики в Reader
 func (mh *mainHandlers) GetValueHandler() http.Handler {
-	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
-		rw := responseWriter{w}
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		metricDB, err := mh.EmbedingHandlers.GetMetricDBFromRequest(req)
 		if err != nil {
 			if errors.Is(err, urlpath.ErrEmptyNameField) {
-				return http.StatusNotFound, err
+				http.Error(rw, err.Error(), http.StatusNotFound)
+				return
 			}
-			return http.StatusBadRequest, err
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
 		}
 
 		newMetricDB, err := mh.store.Get(req.Context(), metricDB)
 		if err != nil {
-			return http.StatusNotFound, err
+			http.Error(rw, err.Error(), http.StatusNotFound)
+			return
 		}
 
-		// NOTE
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-
-		if err = rw.WriteString(newMetricDB.String()); err != nil {
-			return http.StatusNotFound, err
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if _, err = rw.Write([]byte(newMetricDB.String())); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
 		}
-
-		return 0, nil
 	})
+}
+
+func hash(data []byte, key []byte) ([]byte, error) {
+	h := hmac.New(sha256.New, key)
+	_, err := h.Write(data)
+	if err != nil {
+		return nil, errors.New("err hash")
+	}
+
+	sum := h.Sum(nil)
+	return sum, nil
 }
 
 // Парсинг метрики из Body
 // Чтение метрики из хранилища
 // Запись метрики в Body
 func (mh *mainHandlers) PostValueHandler() http.Handler {
-	return mh.handlerFunc(func(w http.ResponseWriter, req *http.Request) (int, error) {
-		rw := responseWriter{w}
-		w.Header().Set("Content-Type", ApplicationJSONConst)
-
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		metricDB, err := metricFromBoby(req.Body)
-
 		if err != nil {
-			return http.StatusNotFound, err
+			http.Error(rw, err.Error(), http.StatusNotFound)
+			return
 		}
 
 		newMetricDB, err := mh.store.Get(req.Context(), metricDB)
 		if err != nil {
-			return http.StatusNotFound, err
+			http.Error(rw, err.Error(), http.StatusNotFound)
+			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		err = rw.WriteAsJSON(newMetricDB)
-		if err != nil {
-			return http.StatusBadRequest, err
+		rw.Header().Set("Content-Type", ApplicationJSONConst)
+		if err := json.NewEncoder(rw).Encode(newMetricDB); err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
 		}
-
-		return 0, nil
 	})
 }
 
 func (mh *mainHandlers) PostUpdateHandler() http.Handler {
-	return mh.handlerFunc(func(rw http.ResponseWriter, req *http.Request) (int, error) {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("Content-Type") == ApplicationJSONConst {
-			return mh.postJSONUpdate(rw, req)
+			mh.postJSONUpdate(rw, req)
+			return
 		}
-
-		return mh.postUpdate(rw, req)
+		mh.postUpdate(rw, req)
 	})
 }
 
@@ -172,67 +155,61 @@ func (mh *mainHandlers) PostUpdateHandler() http.Handler {
 // Запись метрики в хранилище
 // Чтение метрики из хранилища
 // Запись метрики в Body
-func (mh *mainHandlers) postJSONUpdate(w http.ResponseWriter, req *http.Request) (int, error) {
-	rw := responseWriter{w}
-
+func (mh *mainHandlers) postJSONUpdate(rw http.ResponseWriter, req *http.Request) {
 	metricDB, err := metricFromBoby(req.Body)
 	if err != nil {
-		return http.StatusNotFound, err
+		http.Error(rw, err.Error(), http.StatusNotFound)
+		return
 	}
 
 	newMetricDB, err := mh.store.Update(req.Context(), metricDB)
 	if err != nil {
-		return http.StatusBadRequest, err
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	rw.w.Header().Set("Content-Type", ApplicationJSONConst)
-
-	rw.w.WriteHeader(http.StatusOK)
-	if err = rw.WriteAsJSON(newMetricDB); err != nil {
-		return http.StatusBadRequest, err
+	rw.Header().Set("Content-Type", ApplicationJSONConst)
+	if err := json.NewEncoder(rw).Encode(newMetricDB); err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
 	}
-
-	return 0, nil
 }
 
 // Парсинг метрики из URL
 // Запись метрики в хранилище
-func (mh *mainHandlers) postUpdate(w http.ResponseWriter, req *http.Request) (int, error) {
+func (mh *mainHandlers) postUpdate(rw http.ResponseWriter, req *http.Request) {
 	metricDB, err := mh.EmbedingHandlers.GetUpdateMetricDBFromRequest(req)
 	if err != nil {
 		if errors.Is(err, urlpath.ErrEmptyNameField) {
-			return http.StatusNotFound, err
+			http.Error(rw, err.Error(), http.StatusNotFound)
+			return
 		}
-		return http.StatusBadRequest, err
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	_, err = mh.store.Update(req.Context(), metricDB)
 	if err != nil {
-		return http.StatusNotFound, err
+		http.Error(rw, err.Error(), http.StatusNotFound)
+		return
 	}
-
-	return 0, nil
 }
 
 func (mh *mainHandlers) PostUpdatesHandler() http.Handler {
-	return mh.handlerFunc(func(rw http.ResponseWriter, req *http.Request) (int, error) {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if req.Header.Get("Content-Type") != ApplicationJSONConst {
-			return http.StatusBadRequest, errors.New("contentType is not appJson")
+			http.Error(rw, "contentType is not appJson", http.StatusBadRequest)
+			return
 		}
 
 		metricsDB, err := metricsFromBoby(req.Body)
 		if err != nil {
-			return http.StatusBadRequest, err
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
 		}
-
-		rw.Header().Set("Content-Type", ApplicationJSONConst)
-		rw.WriteHeader(http.StatusOK)
 
 		if err := mh.store.UpdateBatch(req.Context(), metricsDB); err != nil {
-			return http.StatusBadRequest, err
+			http.Error(rw, err.Error(), http.StatusBadRequest)
 		}
-
-		return 0, nil
 	})
 }
 

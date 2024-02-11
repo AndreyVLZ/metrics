@@ -2,64 +2,84 @@ package main
 
 import (
 	"flag"
-	"os"
-	"strconv"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
 
+	arg "github.com/AndreyVLZ/metrics/internal/argument"
 	"github.com/AndreyVLZ/metrics/internal/log/zap"
 )
 
 func main() {
-	addrPtr := flag.String("a", "localhost:8080", "адрес эндпоинта HTTP-сервера")
-	storeIntervalPtr := flag.Int("i", 300, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск")
-	storagePathPtr := flag.String("f", "/tmp/metrics-db.json", "полное имя файла, куда сохраняются текущие значения")
-	restorePrt := flag.Bool("r", true, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера ")
-	databaseDNSPtr := flag.String("d", "", "строка с адресом подключения к БД")
-	flag.Parse()
-
-	var opts []metricserver.FuncOpt
-	opts = append(opts,
-		metricserver.SetAddr(*addrPtr),
-		metricserver.SetStoreInt(*storeIntervalPtr),
-		metricserver.SetRestore(*restorePrt),
-		metricserver.SetStorePath(*storagePathPtr),
-		metricserver.SetDatabaseDNS(*databaseDNSPtr),
+	var (
+		addr          = metricserver.AddressDefault
+		storeInterval = metricserver.StoreIntervalDefault
+		storagePath   = metricserver.StoragePathDefault
+		databaseDNS   = ""
+		isRestore     = metricserver.IsRestore
+		key           = ""
 	)
 
-	if addrENV, ok := os.LookupEnv("ADDRESS"); ok {
-		opts = append(opts, metricserver.SetAddr(addrENV))
-	}
-
-	var ri int
-	if storeIntENV, ok := os.LookupEnv("STORE_INTERVAL"); ok {
-		var err error
-		if ri, err = strconv.Atoi(storeIntENV); err == nil {
-			opts = append(opts, metricserver.SetStoreInt(ri))
-		}
-	}
-	// NOTE проверить на пустое значение
-	if storagePathENV, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
-		opts = append(opts, metricserver.SetStorePath(storagePathENV))
-	}
-
-	if restoreENV, ok := os.LookupEnv("RESTORE"); ok {
-		var r bool
-		if restoreENV == "true" {
-			r = true
-		}
-		opts = append(opts, metricserver.SetRestore(r))
-	}
-
-	if databaseENV, ok := os.LookupEnv("DATABASE_DSN"); ok {
-		opts = append(opts, metricserver.SetDatabaseDNS(databaseENV))
-	}
+	args := arg.Array(
+		arg.String(
+			&addr,
+			"a",
+			"ADDRESS",
+			"адрес эндпоинта HTTP-сервера",
+		),
+		arg.Int(
+			&storeInterval,
+			"i",
+			"STORE_INTERVAL",
+			"интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск",
+		),
+		arg.String(
+			&storagePath,
+			"f",
+			"FILE_STORAGE_PATH",
+			"полное имя файла, куда сохраняются текущие значения",
+		),
+		arg.Bool(
+			&isRestore,
+			"r",
+			"RESTORE",
+			"определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера",
+		),
+		arg.String(
+			&databaseDNS,
+			"d",
+			"DATABASE_DSN",
+			"строка с адресом подключения к БД",
+		),
+		arg.String(
+			&key,
+			"k",
+			"KEY",
+			"ключ",
+		),
+	)
 
 	// объявление логера
 	logger := zap.New(zap.DefaultConfig())
 
+	for i := range args {
+		err := args[i]()
+		if err != nil {
+			logger.Info("parse args", "err", err)
+		}
+	}
+
+	flag.Parse()
+
 	//сервер
-	srv, err := metricserver.New(logger, opts...)
+	srv, err := metricserver.New(
+		logger,
+		metricserver.SetAddr(addr),
+		metricserver.SetStoreInt(storeInterval),
+		metricserver.SetStorePath(storagePath),
+		metricserver.SetRestore(isRestore),
+		metricserver.SetDatabaseDNS(databaseDNS),
+		metricserver.SetKey(key),
+	)
 	if err != nil {
 		logger.Error("Err server build %v\n", err)
 	}

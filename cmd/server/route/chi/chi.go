@@ -5,8 +5,6 @@ import (
 	"net/http"
 
 	"github.com/AndreyVLZ/metrics/cmd/server/route/handlers"
-	"github.com/AndreyVLZ/metrics/cmd/server/route/mainhandler"
-	"github.com/AndreyVLZ/metrics/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -26,17 +24,7 @@ func New() *chiMux {
 	}
 }
 
-func (s *chiMux) SetStore(store storage.Storage) http.Handler {
-	s.setHandlers(
-		mainhandler.NewMainHandlers(
-			store,
-			NewChiHandle(),
-		),
-	)
-	return s.mux
-}
-
-func (s *chiMux) setHandlers(mh handlers.Handlers) {
+func (s *chiMux) SetHandlers(mh handlers.Handlers) http.Handler {
 	updateEndPoint := fmt.Sprintf(
 		"/{%s}/{%s}/{%s}",
 		TypeChiConst, NameChiConst, ValueChiConst,
@@ -48,12 +36,10 @@ func (s *chiMux) setHandlers(mh handlers.Handlers) {
 
 	s.mux.Route("/", func(r chi.Router) {
 		r.Get("/", mh.ListHandler().ServeHTTP)
-		r.Route("/update", func(r chi.Router) {
-			r.Post(
-				updateEndPoint,
-				mh.PostUpdateHandler().ServeHTTP,
-			)
-		})
+
+		r.Get("/ping", mh.PingHandler().ServeHTTP)
+
+		r.Post("/updates/", mh.PostUpdatesHandler().ServeHTTP)
 
 		r.Route("/value", func(r chi.Router) {
 			r.Get(
@@ -61,9 +47,22 @@ func (s *chiMux) setHandlers(mh handlers.Handlers) {
 				mh.GetValueHandler().ServeHTTP,
 			)
 			r.Post(
-				valueEndPoint,
+				"/",
 				mh.PostValueHandler().ServeHTTP,
 			)
 		})
+
+		r.Route("/update", func(r chi.Router) {
+			r.Post(
+				"/",
+				mh.PostUpdateHandler().ServeHTTP,
+			)
+			r.Post(
+				updateEndPoint,
+				mh.PostUpdateHandler().ServeHTTP,
+			)
+		})
 	})
+
+	return s.mux
 }

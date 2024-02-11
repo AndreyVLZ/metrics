@@ -8,8 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-//var _ mainhandler.EmbedingHandlers = &chiHandle{}
-
 type chiHandle struct{}
 
 func NewChiHandle() *chiHandle {
@@ -29,7 +27,7 @@ func (h *chiHandle) GetMetricDBFromRequest(req *http.Request) (metric.MetricDB, 
 	return metric.URLParse(
 		getURLPath.Type(),
 		getURLPath.Name(),
-		"",
+		"0",
 	)
 }
 
