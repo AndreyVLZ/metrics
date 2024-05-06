@@ -2,6 +2,7 @@ package zap
 
 import (
 	"log/slog"
+	_ "net/http/pprof"
 	"time"
 
 	"go.uber.org/zap"

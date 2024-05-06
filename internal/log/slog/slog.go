@@ -2,6 +2,7 @@ package slog
 
 import (
 	"log/slog"
+	_ "net/http/pprof"
 	"os"
 )
 

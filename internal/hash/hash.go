@@ -3,14 +3,32 @@ package hash
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	_ "net/http/pprof"
 )
 
 func SHA256(data []byte, key []byte) ([]byte, error) {
-	h := hmac.New(sha256.New, key)
-	_, err := h.Write(data)
+	hash := hmac.New(sha256.New, key)
+
+	_, err := hash.Write(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hash write: %w", err)
 	}
 
-	return h.Sum(nil), nil
+	return hash.Sum(nil), nil
+}
+
+func ValidMAC(messageMACStr string, message, key []byte) (bool, error) {
+	expectedMAC, err := SHA256(message, key)
+	if err != nil {
+		return false, fmt.Errorf("sha: %w", err)
+	}
+
+	messageMAC, err := hex.DecodeString(messageMACStr)
+	if err != nil {
+		return false, fmt.Errorf("hex decode: %w", err)
+	}
+
+	return hmac.Equal(messageMAC, expectedMAC), nil
 }
