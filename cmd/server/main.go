@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	//
 	addrPtr := flag.String("a", "localhost:8080", "адрес эндпоинта HTTP-сервера")
 	storeIntervalPtr := flag.Int("i", 300, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск")
 	storagePathPtr := flag.String("f", "/tmp/metrics-db.json", "полное имя файла, куда сохраняются текущие значения")
