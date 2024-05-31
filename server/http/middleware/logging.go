@@ -66,6 +66,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
+// Логирование.
 func Logging(log iLogger, next http.Handler) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		start := time.Now()

@@ -1,3 +1,4 @@
+// Отстановка StartStoper по сигналу os.Interrupt.
 package shutdown
 
 import (

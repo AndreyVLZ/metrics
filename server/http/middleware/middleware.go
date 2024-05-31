@@ -14,6 +14,7 @@ type Middle func(http.Handler) http.Handler
 func AppJSON() Middle   { return contentType(appJSON) }
 func TextPlain() Middle { return contentType(textPlain) }
 
+// Middleware для Content-Type.
 func contentType(contentType string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {

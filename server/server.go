@@ -12,17 +12,20 @@ import (
 	"github.com/AndreyVLZ/metrics/server/service"
 )
 
+// Интерфейс для http.Server.
 type iAPI interface {
 	Start() error
 	Stop(ctx context.Context) error
 }
 
+// Интерфейс для сервиса.
 type IService interface {
 	Name() string
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }
 
+// Сервер.
 type Server struct {
 	cfg      *Config
 	api      iAPI
@@ -66,7 +69,7 @@ func New(cfg *Config, log *slog.Logger) Server {
 	}
 }
 
-// Запуск сервера
+// Запуск сервера.
 func (srv *Server) Start(ctx context.Context) error {
 	srv.log.LogAttrs(ctx,
 		slog.LevelInfo, "start server",

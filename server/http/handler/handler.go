@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	ApplicationJSONConst = "application/json"
-	TextHTMLConst        = "text/html"
+	ApplicationJSONConst = "application/json" // Константа для Content-Type app/json.
+	TextHTMLConst        = "text/html"        // Константа для Content-Type text/html.
 )
 
 type srvUpdater interface {
@@ -35,6 +35,8 @@ type srvPing interface {
 	Ping() error
 }
 
+// Обновление метрики. [POST-JSON].
+// Чтение Body, запись в ResponseWriter ответа от service.
 func PostJSONUpdateHandle(srv srvUpdater, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		met, err := metricFromBoby(req.Body)
@@ -62,6 +64,8 @@ func PostJSONUpdateHandle(srv srvUpdater, log *slog.Logger) http.Handler {
 	})
 }
 
+// Обновление метрики. [POST].
+// Чтение Request, запись в ResponseWriter ответа от service.
 func PostUpdateHandle(srv srvUpdater, log *slog.Logger, fn func(req *http.Request) model.MetricStr) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		metStr := fn(req)
@@ -91,6 +95,8 @@ func PostUpdateHandle(srv srvUpdater, log *slog.Logger, fn func(req *http.Reques
 	})
 }
 
+// Получние метрики. [GET].
+// Чтение Request, запись в ResponseWriter ответа от service.
 func GetValueHandle(srv srvGetter, log *slog.Logger, fn func(*http.Request) model.InfoStr) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		infoStr := fn(req)
@@ -120,6 +126,8 @@ func GetValueHandle(srv srvGetter, log *slog.Logger, fn func(*http.Request) mode
 	})
 }
 
+// Получние метрики. [POST].
+// Чтение Body, запись в ResponseWriter ответа от service.
 func PostValueHandle(srv srvGetter, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		met, err := metricFromBoby(req.Body)
@@ -155,6 +163,8 @@ func PostValueHandle(srv srvGetter, log *slog.Logger) http.Handler {
 	})
 }
 
+// Обновление списка метрик. [POST].
+// Чтение Body, запись в ResponseWriter ответа от service.
 func PostUpdatesHandler(srv srvBatch, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		var list []model.MetricJSON
@@ -178,6 +188,8 @@ func PostUpdatesHandler(srv srvBatch, log *slog.Logger) http.Handler {
 	})
 }
 
+// Получение списка метрик. [GET].
+// Запись в ResponseWriter ответа от service.
 func ListHandle(srv srvBatch, tmpl *template.Template, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		list, err := srv.List(req.Context())
@@ -205,6 +217,7 @@ func ListHandle(srv srvBatch, tmpl *template.Template, log *slog.Logger) http.Ha
 	})
 }
 
+// Вызов service.Ping. [GET].
 func PingHandler(srv srvPing, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		if err := srv.Ping(); err != nil {
@@ -218,6 +231,7 @@ func PingHandler(srv srvPing, log *slog.Logger) http.Handler {
 	})
 }
 
+// Чтение метрики из Body.
 func metricFromBoby(body io.ReadCloser) (model.MetricJSON, error) {
 	defer body.Close()
 

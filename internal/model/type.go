@@ -7,8 +7,9 @@ const (
 
 type Type int8
 
-const totalTypes = 2
+const totalTypes = 2 // Кол-во типов для метрик.
 
+// Получение типа из строки. Ошибка если тип не поддерживается.
 func ParseType(typeStr string) (Type, error) {
 	switch typeStr {
 	case TypeCountConst.String():
@@ -20,6 +21,7 @@ func ParseType(typeStr string) (Type, error) {
 	}
 }
 
+// Возващает имя для типа метрики.
 func (t Type) String() string { return supportTypeMetric()[t] }
 
 func supportTypeMetric() [totalTypes]string {

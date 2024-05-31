@@ -1,3 +1,4 @@
+// Реализация сохрениения метрик в файл синхронно либо по интервалу StoreInt для storage.
 package filestore
 
 import (

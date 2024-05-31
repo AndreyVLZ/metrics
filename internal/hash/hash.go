@@ -7,6 +7,7 @@ import (
 	"fmt"
 )
 
+// Хеширование data по ключу key.
 func SHA256(data []byte, key []byte) ([]byte, error) {
 	hash := hmac.New(sha256.New, key)
 
@@ -18,6 +19,7 @@ func SHA256(data []byte, key []byte) ([]byte, error) {
 	return hash.Sum(nil), nil
 }
 
+// Проверяет хеш messageMACStr от message по ключу key.
 func ValidMAC(messageMACStr string, message, key []byte) (bool, error) {
 	expectedMAC, err := SHA256(message, key)
 	if err != nil {

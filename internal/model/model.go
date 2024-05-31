@@ -18,6 +18,7 @@ type MetricJSON struct {
 	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 }
 
+// Строковое представления значения метрики.
 func (m MetricJSON) String() string {
 	switch m.MType {
 	case TypeCountConst.String():
@@ -32,6 +33,7 @@ type Info struct {
 	MType Type
 }
 
+// Парсинг имени и типа метрики. Ошибка если имя =="" тип не поддерживается.
 func ParseInfo(nameStr, typeStr string) (Info, error) {
 	if nameStr == "" {
 		return Info{}, ErrNameEmpty
@@ -74,6 +76,7 @@ func NewGaugeMetric(mName string, val float64) Metric {
 func (m *Metric) GetValue() float64 { return *m.Val }
 func (m *Metric) GetDelta() int64   { return *m.Delta }
 
+// Обновляет метрику новым значением. Ошибка если delta или value == nil.
 func (m *Metric) Update(newVal Value) error {
 	switch m.MType {
 	case TypeCountConst:
@@ -188,6 +191,7 @@ func ParseMetric(met MetricJSON) (Metric, error) {
 	return Metric{Info: info, Value: val}, nil
 }
 
+// Возвращает массив MetricJSON из массива Metric.
 func BuildArrMetric(arr []MetricJSON) ([]Metric, error) {
 	res := make([]Metric, len(arr))
 

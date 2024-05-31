@@ -44,13 +44,14 @@ CREATE TABLE metric (
 );`
 )
 
+// Метрика для сканирования из postgres.
 type metricDB struct {
 	Info  model.Info
 	Delta sql.NullInt64
 	Value sql.NullFloat64
 }
 
-func (m metricDB) BuildMetric() (model.Metric, error) {
+func (m metricDB) buildMetric() (model.Metric, error) {
 	switch m.Info.MType {
 	case model.TypeCountConst:
 		if !m.Delta.Valid {
@@ -130,7 +131,7 @@ func (s *Postgres) List(ctx context.Context) ([]model.Metric, error) {
 			return nil, fmt.Errorf("row scan: %w", err)
 		}
 
-		met, err := metDB.BuildMetric()
+		met, err := metDB.buildMetric()
 		if err != nil {
 			return nil, fmt.Errorf("%w", err)
 		}
@@ -215,6 +216,9 @@ func (s *Postgres) Update(ctx context.Context, met model.Metric) (model.Metric, 
 	return update(ctx, getStmt, setStmt, updStmt, met)
 }
 
+// Вызывает подготовленный запрос на получение метрики,
+// если метрика существует в базе - обновляет метрику и вызывает поготовленный запрос на обновление метрики в базе,
+// иначе вызывает подготовленный запрос на сохранение новой метрики.
 func update(ctx context.Context, getStmt, setStmt, updStmt *sql.Stmt, met model.Metric) (model.Metric, error) {
 	metRes, err := get(ctx, getStmt, met.Info)
 	if err != nil {
@@ -271,7 +275,7 @@ func get(ctx context.Context, getStmt *sql.Stmt, mInfo model.Info) (model.Metric
 		return model.Metric{}, fmt.Errorf("%w", err)
 	}
 
-	met, err := metDB.BuildMetric()
+	met, err := metDB.buildMetric()
 	if err != nil {
 		return model.Metric{}, fmt.Errorf("%w", err)
 	}
@@ -279,8 +283,8 @@ func get(ctx context.Context, getStmt *sql.Stmt, mInfo model.Info) (model.Metric
 	return met, nil
 }
 
+// Создает необходимые таблицы в базе.
 func (s *Postgres) createTable(ctx context.Context) error {
-	fmt.Println("TYT")
 	isExist, err := s.checkTable(ctx, "metric")
 	if err != nil {
 		return fmt.Errorf("%w", err)
@@ -301,6 +305,7 @@ func (s *Postgres) createTable(ctx context.Context) error {
 	return nil
 }
 
+// Проверяет наличие таблицы nameTable.
 func (s *Postgres) checkTable(ctx context.Context, nameTable string) (bool, error) {
 	var n int64
 
@@ -317,6 +322,7 @@ func (s *Postgres) checkTable(ctx context.Context, nameTable string) (bool, erro
 	return true, nil
 }
 
+// Добавляет в таблицу поддерживамые типы метрик.
 func (s *Postgres) addTypes(ctx context.Context) error {
 	sqlAddTypeSQL := "INSERT INTO mettype (type_id,mtype) VALUES ($1,$2)"
 	for mtype := model.TypeCountConst; mtype <= model.TypeGaugeConst; mtype++ {

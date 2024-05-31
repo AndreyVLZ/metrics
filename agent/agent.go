@@ -19,22 +19,24 @@ import (
 )
 
 const (
-	urlFormat = "http://%s/updates/"
-	countTask = 3
+	urlFormat = "http://%s/updates/" // Эндпоинт для отправки метрик.
+	countTask = 3                    // Кол-во задач для Агента.
 )
 
 const (
-	attemptConst          = 3
-	durationTaskConst     = 2
-	retryTimeoutStepConst = 2
+	attemptConst          = 3 // Кол-во повторов отправки при ошибки.
+	durationTaskConst     = 2 // Таймаут опроса метрик из пакета goutils.
+	retryTimeoutStepConst = 2 // Шаг увелечения таймаута для повторной отправки.
 )
 
+// Интерфейс статистики.
 type iStats interface {
 	Init() error
 	RuntimeList() []model.Metric
 	UtilList() []model.Metric
 }
 
+// Интерфейс хранилища.
 type storage interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -42,6 +44,7 @@ type storage interface {
 	List(ctx context.Context) ([]model.Metric, error)
 }
 
+// Агент.
 type Agent struct {
 	cfg       *Config
 	stats     iStats
@@ -51,6 +54,7 @@ type Agent struct {
 	chErr     chan error
 }
 
+// Новый Агент.
 func New(cfg *Config, store storage, log *slog.Logger) *Agent {
 	return &Agent{
 		cfg:       cfg,
@@ -76,6 +80,8 @@ func New(cfg *Config, store storage, log *slog.Logger) *Agent {
 	}
 }
 
+// Повторный вызов функции fnSend attempts раз.
+// Возвращает ошибку с кол-вом вызовов функции и самой ошибкой fnSend.
 func retry(ctx context.Context, attempts int, sleep time.Duration, fnSend func() error) error {
 	var err error
 
@@ -100,6 +106,7 @@ func retry(ctx context.Context, attempts int, sleep time.Duration, fnSend func()
 	return fmt.Errorf("попыток %d, error: %w", attempts, err)
 }
 
+// Отправка данных.
 func (a *Agent) send(ctx context.Context, data []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.urlToSend, bytes.NewReader(data))
 	if err != nil {
@@ -183,6 +190,7 @@ func (a *Agent) Start(ctx context.Context) error {
 	return nil
 }
 
+// Запуск task'ов и worker'ов Агента.
 func (a *Agent) start(ctx context.Context) {
 	ctxCan, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -201,6 +209,7 @@ func (a *Agent) start(ctx context.Context) {
 	close(a.chErr)
 }
 
+// Задача для Агента.
 type task struct {
 	name     string
 	duration time.Duration
@@ -253,7 +262,6 @@ func (a *Agent) runTaskPool(ctx context.Context) (<-chan []model.Metric, <-chan 
 					chErr <- fmt.Errorf("задача [%v] отменена", task.name)
 					return
 				case <-time.After(task.duration):
-					// fmt.Printf("tick [%v]\n", task.name)
 					if err := task.fn(); err != nil {
 						chErr <- err
 					}
@@ -266,7 +274,6 @@ func (a *Agent) runTaskPool(ctx context.Context) (<-chan []model.Metric, <-chan 
 		wgTask.Wait() // Ждем завершения работы всех задач [Task]
 		close(chList) // Закрываем канал в который писали Task'и
 		close(chErr)  // Закрываем канал в который писали Task'и
-		// fmt.Println("waitTask OK")
 	}()
 
 	return chList, chErr

@@ -13,10 +13,10 @@ import (
 
 type Name uint
 
-const totalRuntimeMetric = 29
+const totalRuntimeMetric = 29 // Кол-во метрик из пакета runtime.
 
 const (
-	TotalMetric int = 32
+	TotalMetric int = 32 // Общее кол-во метрик.
 )
 
 // Константы поддерживаемых метрик:
@@ -79,16 +79,19 @@ func supportName() [TotalMetric]string {
 	}
 }
 
+// Возвращает имя метрики.
 func (n Name) String() string { return supportName()[n] }
 
 var (
-	arrFuncUtilRead = []func(*utilStats) float64{
+	// Массив функций для чтения метрик из пакета gopsutil.
+	arrFuncUtilRead = [3]func(*utilStats) float64{
 		func(u *utilStats) float64 { return float64(u.memStats.Available) },
 		func(u *utilStats) float64 { return float64(u.memStats.Free) },
 		func(_ *utilStats) float64 { cpuCount, _ := cpu.Counts(true); return float64(cpuCount) },
 	}
 
-	arrFuncRuntimeRead = []func(*runtimeStats) float64{
+	// Массив функций для чтения метрик из пакета runtime.
+	arrFuncRuntimeRead = [28]func(*runtimeStats) float64{
 		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Alloc) },
 		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.BuckHashSys) },
 		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Frees) },
@@ -120,6 +123,7 @@ var (
 	}
 )
 
+// Статистика.
 type Stats struct {
 	rtStats   *runtimeStats
 	utilStats utilStats
@@ -132,12 +136,15 @@ func New() *Stats {
 	}
 }
 
+// Инициализирует пакет gopsutil.
 func (s *Stats) Init() error { return s.utilStats.Init() }
 
+// Возвращает срез метрик, прочитанных из пакета gopsutil.
 func (s *Stats) UtilList() []model.Metric {
 	return s.readList(TotalMemory, CPUutilization1)
 }
 
+// Возвращает срез метрик, прочитанных из пакета runtime.
 func (s *Stats) RuntimeList() []model.Metric {
 	return s.readList(Alloc, PollCount)
 }
@@ -172,6 +179,7 @@ func (s *Stats) readMetric(metName Name) model.Metric {
 	}
 }
 
+// Статистика для runtime.
 type runtimeStats struct {
 	memStats runtime.MemStats
 	total    atomic.Int64
@@ -186,10 +194,12 @@ func newRuntimeStats() *runtimeStats {
 	}
 }
 
+// Статистика для gopsutil.
 type utilStats struct {
 	memStats *mem.VirtualMemoryStat
 }
 
+// Инициализация gopsutil.
 func (us *utilStats) Init() error {
 	vmStats, err := mem.VirtualMemory()
 	if err != nil {

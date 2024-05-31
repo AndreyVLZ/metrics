@@ -1,3 +1,4 @@
+// Реализация Ping метода для store.
 package adapter
 
 import (

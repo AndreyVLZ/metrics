@@ -1,3 +1,4 @@
+// Парсинг flag и Env.
 package argument
 
 import (
@@ -11,6 +12,7 @@ type Arg func() error
 
 func Array(args ...Arg) []Arg { return args }
 
+// Возвращает функцию для парсинга Int флага и env.
 func Int(valInt *int, nameFlag string, nameENV string, usage string) Arg {
 	return func() error {
 		flag.IntVar(valInt, nameFlag, *valInt, usage)
@@ -26,6 +28,7 @@ func Int(valInt *int, nameFlag string, nameENV string, usage string) Arg {
 	}
 }
 
+// Парсинг String флага.
 func String(valStr *string, nameFlag string, nameENV string, usage string) Arg {
 	return func() error {
 		flag.StringVar(valStr, nameFlag, *valStr, usage)

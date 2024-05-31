@@ -56,6 +56,7 @@ func (c *compressReader) Close() error {
 	return c.zr.Close()
 }
 
+// Сжатие данных.
 func Gzip(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,

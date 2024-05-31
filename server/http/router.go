@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Шаблон html.
 const tpls = `{{define "List"}}
 <!DOCTYPE html>
 <html>
@@ -29,6 +30,7 @@ const tpls = `{{define "List"}}
 </body>
 </html>{{end}}`
 
+// Интерфейс service.
 type service interface {
 	Ping() error
 	Update(ctx context.Context, metJSON model.MetricJSON) (model.MetricJSON, error)
@@ -41,6 +43,7 @@ func NewRoute(srv service, log *slog.Logger) http.Handler {
 	return initChiRouter(srv, log)
 }
 
+// Инициализация chi роутера.
 func initChiRouter(srv service, log *slog.Logger) *chi.Mux {
 	const (
 		typeChiConst  = "typeStr"
@@ -97,6 +100,7 @@ func initChiRouter(srv service, log *slog.Logger) *chi.Mux {
 	return route
 }
 
+// Парсинг url [/counter/Name/Value].
 func metFromReq(args [3]string) func(req *http.Request) model.MetricStr {
 	return func(req *http.Request) model.MetricStr {
 		return model.MetricStr{
@@ -106,6 +110,7 @@ func metFromReq(args [3]string) func(req *http.Request) model.MetricStr {
 	}
 }
 
+// Парсинг url [/counter/Name].
 func metInfoFromReq(args [2]string) func(req *http.Request) model.InfoStr {
 	return func(req *http.Request) model.InfoStr {
 		return model.InfoStr{

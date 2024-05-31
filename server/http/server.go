@@ -5,10 +5,12 @@ import (
 	"net/http"
 )
 
+// Http server.
 type Server struct {
 	server *http.Server
 }
 
+// Конфиг для http.server.
 type Config struct {
 	Addr string
 }
@@ -23,5 +25,8 @@ func NewServer(cfg Config, h http.Handler) Server {
 	}
 }
 
-func (s Server) Start() error                   { return s.server.ListenAndServe() }
+// Запуск http.server.
+func (s Server) Start() error { return s.server.ListenAndServe() }
+
+// Остановка http.server.
 func (s Server) Stop(ctx context.Context) error { return s.server.Shutdown(ctx) }

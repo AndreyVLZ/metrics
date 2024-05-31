@@ -1,13 +1,14 @@
+// Формирует данные для запроса к store и для последующего ответа handler'у.
 package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 )
 
+// Интерфейс хранилища.
 type store interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -18,8 +19,7 @@ type store interface {
 	Ping() error
 }
 
-var errTypeNotSupport = errors.New("type not support")
-
+// Сервис.
 type Service struct {
 	store store
 }

@@ -42,6 +42,7 @@ type myReaderCloser struct {
 	body io.ReadCloser
 }
 
+// Хеширование данных.
 func Hash(key string, next http.Handler) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		fmt.Printf("SERVER-KEY [%s]\n", key)
