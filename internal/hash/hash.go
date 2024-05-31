@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	_ "net/http/pprof"
 )
 
 func SHA256(data []byte, key []byte) ([]byte, error) {

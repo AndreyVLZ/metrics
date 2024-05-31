@@ -4,26 +4,16 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
+	"time"
 
 	arg "github.com/AndreyVLZ/metrics/internal/argument"
 	"github.com/AndreyVLZ/metrics/internal/log/zap"
+	"github.com/AndreyVLZ/metrics/internal/shutdown"
 	"github.com/AndreyVLZ/metrics/server"
-)
-
-const (
-	addr    = ":8080"  // адрес сервера
-	maxSize = 10000000 // будем растить слайс до 10 миллионов элементов
+	"github.com/AndreyVLZ/metrics/server/adapter"
 )
 
 func main() {
-	go func() {
-		http.ListenAndServe("localhost:8081", nil)
-	}()
-
 	var (
 		addr          = server.AddressDefault
 		storeInterval = server.StoreIntervalDefault
@@ -32,7 +22,6 @@ func main() {
 		isRestore     = server.IsRestoreDefault
 		key           = ""
 	)
-
 	args := arg.Array(
 		arg.String(
 			&addr,     // val
@@ -94,37 +83,16 @@ func main() {
 }
 
 func run(cfg *server.Config) {
-	ctx := context.Background()
+	var timeout time.Duration = 7
 
-	// объявление логера
 	logger := zap.New(zap.DefaultConfig())
-
 	server := server.New(cfg, logger)
+	shutdown := shutdown.New(
+		adapter.NewShutdown(&server),
+		timeout,
+	)
 
-	chErr := make(chan error)
-	ctxSinal, stopSignal := signal.NotifyContext(ctx, os.Interrupt)
-
-	go func(ce chan<- error) {
-		defer close(ce)
-		ce <- server.Start(ctxSinal)
-	}(chErr)
-
-	select {
-	case <-ctxSinal.Done():
-		log.Println("signal")
-	case err := <-chErr:
-		stopSignal()
-
-		if err != nil {
-			log.Printf("server start err %v\n", err)
-		}
+	if err := shutdown.Start(context.Background()); err != nil {
+		log.Printf("server error: %v\n", err)
 	}
-
-	if err := server.Stop(ctx); err != nil {
-		log.Printf("server stop err: %v\n", err)
-	} else {
-		log.Println("all services stopped")
-	}
-
-	log.Println("server stopped")
 }

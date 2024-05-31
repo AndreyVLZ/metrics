@@ -3,31 +3,72 @@ package service
 import (
 	"context"
 	"errors"
-	_ "net/http/pprof"
+	"fmt"
 
-	m "github.com/AndreyVLZ/metrics/internal/model"
+	"github.com/AndreyVLZ/metrics/internal/model"
 )
 
-type Store interface {
-	UpdateCounter(ctx context.Context, met m.MetricRepo[int64]) (m.MetricRepo[int64], error)
-	UpdateGauge(ctx context.Context, met m.MetricRepo[float64]) (m.MetricRepo[float64], error)
-	GetCounter(ctx context.Context, name string) (m.MetricRepo[int64], error)
-	GetGauge(ctx context.Context, name string) (m.MetricRepo[float64], error)
-	List(ctx context.Context) (m.Batch, error)
-	AddBatch(ctx context.Context, batch m.Batch) error
+type store interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+	Get(ctx context.Context, mInfo model.Info) (model.Metric, error)
+	Update(ctx context.Context, met model.Metric) (model.Metric, error)
+	List(ctx context.Context) ([]model.Metric, error)
+	AddBatch(ctx context.Context, arr []model.Metric) error
 	Ping() error
 }
 
 var errTypeNotSupport = errors.New("type not support")
 
 type Service struct {
-	store Store
+	store store
 }
 
-func New(store Store) Service {
+func New(store store) Service {
 	return Service{
 		store: store,
 	}
 }
 
 func (srv Service) Ping() error { return srv.store.Ping() }
+
+func (srv Service) AddBatch(ctx context.Context, list []model.MetricJSON) error {
+	arr, err := model.BuildArrMetric(list)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	return srv.store.AddBatch(ctx, arr)
+}
+
+func (srv Service) List(ctx context.Context) ([]model.MetricJSON, error) {
+	list, err := srv.store.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	return model.BuildArrMetricJSON(list), nil
+}
+
+func (srv Service) Update(ctx context.Context, metJSON model.MetricJSON) (model.MetricJSON, error) {
+	met, err := model.ParseMetric(metJSON)
+	if err != nil {
+		return model.MetricJSON{}, fmt.Errorf("%w", err)
+	}
+
+	metDB, err := srv.store.Update(ctx, met)
+	if err != nil {
+		return model.MetricJSON{}, fmt.Errorf("%w", err)
+	}
+
+	return model.BuildMetricJSON(metDB), nil
+}
+
+func (srv Service) Get(ctx context.Context, metInfo model.Info) (model.MetricJSON, error) {
+	metDB, err := srv.store.Get(ctx, metInfo)
+	if err != nil {
+		return model.MetricJSON{}, fmt.Errorf("%w", err)
+	}
+
+	return model.BuildMetricJSON(metDB), nil
+}

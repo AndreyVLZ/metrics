@@ -6,42 +6,25 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBuildBatch(t *testing.T) {
+func TestStats(t *testing.T) {
 	stats := New()
-
-	batch, err := stats.BuildBatch()
-	if err != nil {
-		t.Errorf("err buildBatch: %v\n", err)
+	if err := stats.Init(); err != nil {
+		t.Fatal(err)
 	}
 
+	rtList := stats.RuntimeList()
 	t.Run("len count arr", func(t *testing.T) {
-		assert.Equal(t, 1, len(batch.CList))
+		assert.Equal(t, 29, len(rtList))
 	})
 
+	uList := stats.UtilList()
 	t.Run("len gauge arr", func(t *testing.T) {
-		assert.Equal(t, 27, len(batch.GList))
+		assert.Equal(t, 3, len(uList))
 	})
-
 }
 
 func TestSupportName(t *testing.T) {
-	arrWant := []string{
-		// int64
-		"Alloc", "BuckHashSys", "Frees", "GCSys", "HeapAlloc", "HeapIdle",
-		"HeapInuse", "HeapObjects", "HeapReleased", "HeapSys", "LastGC", "Lookups",
-		"MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs", "NextGC",
-		"OtherSys", "PauseTotalNs", "StackInuse", "StackSys", "Sys", "TotalAlloc",
-		// int32
-		"NumForcedGC", "NumGC",
-		// float64
-		"GCCPUFraction",
-	}
-	arr := supportName()
-	for i, name := range arr {
-		assert.Equal(t, arrWant[i], name)
-	}
-
-	arrWantMet := []metricConst{
+	arrWantMet := []Name{
 		Alloc,
 		BuckHashSys,
 		Frees,
@@ -69,8 +52,16 @@ func TestSupportName(t *testing.T) {
 		NumForcedGC,
 		NumGC,
 		GCCPUFraction,
+		RandomValue,
+		PollCount,
+		TotalMemory,
+		FreeMemory,
+		CPUutilization1,
 	}
+
+	names := supportName()
+	assert.Equal(t, len(arrWantMet), len(names))
 	for i, met := range arrWantMet {
-		assert.Equal(t, arrWant[i], met.String())
+		assert.Equal(t, met.String(), names[i])
 	}
 }

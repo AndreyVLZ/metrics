@@ -2,7 +2,6 @@ package zap
 
 import (
 	"log/slog"
-	_ "net/http/pprof"
 	"time"
 
 	"go.uber.org/zap"
@@ -19,7 +18,7 @@ func DefaultConfig() zap.Config {
 	})
 
 	config := zap.Config{
-		Level:             zap.NewAtomicLevelAt(zap.InfoLevel),
+		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
 		Development:       false,
 		DisableCaller:     false,
 		DisableStacktrace: false,

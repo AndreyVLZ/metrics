@@ -6,444 +6,294 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type test[VT ValueType] struct {
-	name  string
-	mType TypeMetric
-	val   VT
-	exep  MetricRepo[VT]
-}
+func TestMetricUpdate(t *testing.T) {
+	t.Run("update counter", func(t *testing.T) {
+		var (
+			initVal int64 = 100
+			updVal  int64 = 100
+			valWant int64 = 200
+		)
 
-type tCase struct {
-	tInt   test[int64]
-	tFloat test[float64]
-}
+		met := NewCounterMetric("Counter-1", initVal)
+		val := NewCounterValue(updVal)
 
-func TestNewMetricRepo(t *testing.T) {
-	tc := tCase{
-		tInt: test[int64]{
-			name:  "Count1",
-			mType: TypeCountConst,
-			val:   1,
-			exep:  MetricRepo[int64]{name: "Count1", mType: TypeCountConst, val: 1},
-		},
-		tFloat: test[float64]{
-			name:  "Gauge1",
-			mType: TypeGaugeConst,
-			val:   1.1,
-			exep:  MetricRepo[float64]{name: "Gauge1", mType: TypeGaugeConst, val: 1.1},
-		},
-	}
-	fNew(t, "counter", tc.tInt)
-	fNew(t, "gauge", tc.tFloat)
-}
+		err := met.Update(val)
 
-func fNew[VT ValueType](t *testing.T, tName string, test test[VT]) {
-	t.Run("newMetricRepo "+tName, func(t *testing.T) {
-		m := NewMetricRepo[VT](test.name, test.mType, test.val)
-		assert.Equal(t, test.exep, m)
+		if assert.NoError(t, err) {
+			assert.Equal(t, valWant, met.GetDelta())
+		}
+	})
+
+	t.Run("update gauge", func(t *testing.T) {
+		var (
+			initVal = 10.01
+			updVal  = 20.02
+			valWant = 20.02
+		)
+
+		met := NewGaugeMetric("Gauge-1", initVal)
+		val := NewGaugeValue(updVal)
+
+		err := met.Update(val)
+
+		if assert.NoError(t, err) {
+			assert.Equal(t, valWant, met.GetValue())
+		}
+	})
+
+	t.Run("update err nil delta", func(t *testing.T) {
+		var initVal int64 = 100
+
+		met := NewCounterMetric("Counter-1", initVal)
+		val := Value{}
+
+		err := met.Update(val)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+
+	t.Run("update err nil value", func(t *testing.T) {
+		var initVal = 10.01
+
+		met := NewGaugeMetric("Gauge-1", initVal)
+		val := Value{}
+
+		err := met.Update(val)
+		if err == nil {
+			t.Error("want err")
+		}
 	})
 }
 
-type testType[VT ValueType] struct {
-	met     MetricRepo[VT]
-	expType TypeMetric
-}
+func TestMetricString(t *testing.T) {
+	t.Run("counter string", func(t *testing.T) {
+		var delta int64 = 10
 
-type caseType struct {
-	tInt   testType[int64]
-	tFloat testType[float64]
-}
+		metCounter := MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
+		assert.Equal(t, "10", metCounter.String())
+	})
 
-func TestTypeMetricRepo(t *testing.T) {
-	tc := caseType{
-		tInt: testType[int64]{
-			met:     MetricRepo[int64]{name: "Count1", mType: TypeCountConst, val: 1},
-			expType: TypeCountConst,
-		},
-		tFloat: testType[float64]{
-			met:     MetricRepo[float64]{name: "Gauge1", mType: TypeGaugeConst, val: 1.1},
-			expType: TypeGaugeConst,
-		},
-	}
+	t.Run("counter string", func(t *testing.T) {
+		var val = 10.01
 
-	fType(t, "counter", tc.tInt)
-	fType(t, "gauge", tc.tFloat)
-}
-
-func fType[VT ValueType](t *testing.T, tName string, test testType[VT]) {
-	t.Run("valMetricRepo "+tName, func(t *testing.T) {
-		assert.Equal(t, test.met.Type(), test.expType.String())
+		metCounter := MetricJSON{ID: "Gauge-1", MType: "gauge", Value: &val}
+		assert.Equal(t, "10.01", metCounter.String())
 	})
 }
 
-type testVal[VT ValueType] struct {
-	met    MetricRepo[VT]
-	expVal VT
-}
+func TestParseInfo(t *testing.T) {
+	t.Run("parse counter", func(t *testing.T) {
+		wantInfo := Info{MName: "Counter-1", MType: TypeCountConst}
+		info, err := ParseInfo("Counter-1", "counter")
+		assert.NoError(t, err)
+		assert.Equal(t, wantInfo, info)
+	})
 
-type caseVal struct {
-	tInt   testVal[int64]
-	tFloat testVal[float64]
-}
+	t.Run("parse gauge", func(t *testing.T) {
+		wantInfo := Info{MName: "Gauge-1", MType: TypeGaugeConst}
+		info, err := ParseInfo("Gauge-1", "gauge")
+		assert.NoError(t, err)
+		assert.Equal(t, wantInfo, info)
+	})
 
-func TestValMetricRepo(t *testing.T) {
-	tc := caseVal{
-		tInt: testVal[int64]{
-			met:    MetricRepo[int64]{name: "Count1", mType: TypeCountConst, val: 1},
-			expVal: 1,
-		},
-		tFloat: testVal[float64]{
-			met:    MetricRepo[float64]{name: "Gauge1", mType: TypeGaugeConst, val: 1.1},
-			expVal: 1.1,
-		},
-	}
+	t.Run("parse err name empty", func(t *testing.T) {
+		_, err := ParseInfo("", "counter")
+		if err == nil {
+			t.Error("want err")
+		}
+	})
 
-	fVal(t, "counter", tc.tInt)
-	fVal(t, "gauge", tc.tFloat)
-}
-
-func fVal[VT ValueType](t *testing.T, tName string, test testVal[VT]) {
-	t.Run("valMetricRepo "+tName, func(t *testing.T) {
-		assert.Equal(t, test.met.Value(), test.expVal)
+	t.Run("parse err type not support", func(t *testing.T) {
+		_, err := ParseInfo("Counter-1", "c")
+		if err == nil {
+			t.Error("want err")
+		}
 	})
 }
 
-type testName[VT ValueType] struct {
-	met     MetricRepo[VT]
-	expName string
+func TestBuildMetricJSON(t *testing.T) {
+	var delta int64 = 10
+
+	wantMet := MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
+	met := NewCounterMetric("Counter-1", 10)
+	metJSON := BuildMetricJSON(met)
+
+	assert.Equal(t, wantMet, metJSON)
 }
 
-type caseName struct {
-	tInt   testName[int64]
-	tFloat testName[float64]
-}
+func TestBuildArrMetricJSON(t *testing.T) {
+	var delta int64 = 10
+	var val = 10.01
 
-func TestNameMetricRepo(t *testing.T) {
-	tc := caseName{
-		tInt: testName[int64]{
-			met:     MetricRepo[int64]{name: "Count1", mType: TypeCountConst, val: 1},
-			expName: "Count1",
-		},
-		tFloat: testName[float64]{
-			met:     MetricRepo[float64]{name: "Gauge1", mType: TypeGaugeConst, val: 1.1},
-			expName: "Gauge1",
-		},
+	wantArr := []MetricJSON{
+		{ID: "Counter-1", MType: "counter", Delta: &delta},
+		{ID: "Gauge-1", MType: "gauge", Value: &val},
 	}
 
-	fName(t, "counter", tc.tInt)
-	fName(t, "gauge", tc.tFloat)
-}
-
-func fName[VT ValueType](t *testing.T, tName string, test testName[VT]) {
-	t.Run("valMetricRepo "+tName, func(t *testing.T) {
-		assert.Equal(t, test.met.Name(), test.expName)
-	})
-}
-
-type testUpd[VT ValueType] struct {
-	met    MetricRepo[VT]
-	updVal VT
-	exMet  MetricRepo[VT]
-}
-
-type caseUpd struct {
-	tInt   testUpd[int64]
-	tFloat testUpd[float64]
-}
-
-func TestUpdateMetricRepo(t *testing.T) {
-	tc := caseUpd{
-		tInt: testUpd[int64]{
-			met:    MetricRepo[int64]{name: "Count1", mType: TypeCountConst, val: 1},
-			updVal: 10,
-			exMet:  MetricRepo[int64]{name: "Count1", mType: TypeCountConst, val: 11},
-		},
-		tFloat: testUpd[float64]{
-			met:    MetricRepo[float64]{name: "Gauge1", mType: TypeGaugeConst, val: 1.1},
-			updVal: 10.01,
-			exMet:  MetricRepo[float64]{name: "Gauge1", mType: TypeGaugeConst, val: 10.01},
-		},
+	arrMet := []Metric{
+		NewCounterMetric("Counter-1", 10),
+		NewGaugeMetric("Gauge-1", 10.01),
 	}
 
-	fUpd(t, "counter", tc.tInt)
-	fUpd(t, "gauge", tc.tFloat)
-}
+	arrMetJSON := BuildArrMetricJSON(arrMet)
 
-func fUpd[VT ValueType](t *testing.T, tName string, test testUpd[VT]) {
-	t.Run("updMetricRepo "+tName, func(t *testing.T) {
-		test.met.Update(test.updVal)
-		assert.Equal(t, test.exMet, test.met)
-	})
+	assert.Equal(t, wantArr, arrMetJSON)
 }
 
 func TestParseMetricJSON(t *testing.T) {
-	type testCase struct {
-		name   string
-		metStr MetricStr
-		isErr  bool
-		fnWant func() MetricJSON
-	}
+	t.Run("parse counter ok", func(t *testing.T) {
+		var delta int64 = 10
 
-	tc := []testCase{
-		{
-			name: "ok counter",
-			metStr: MetricStr{
-				Info: Info{
-					Name:  "Counter-1",
-					MType: TypeCountConst.String(),
-				},
-				Val: "10",
-			},
-			isErr: false,
-			fnWant: func() MetricJSON {
-				val := int64(10)
-				return MetricJSON{
-					ID:    "Counter-1",
-					MType: TypeCountConst.String(),
-					Delta: &val,
-				}
-			},
-		},
+		wantJSON := MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
+		metStr := MetricStr{
+			InfoStr: InfoStr{Name: "Counter-1", MType: "counter"},
+			Val:     "10",
+		}
 
-		{
-			name: "ok gauge",
-			metStr: MetricStr{
-				Info: Info{
-					Name:  "Gauge-1",
-					MType: TypeGaugeConst.String(),
-				},
-				Val: "10.01",
-			},
-			isErr: false,
-			fnWant: func() MetricJSON {
-				val := float64(10.01)
-				return MetricJSON{
-					ID:    "Gauge-1",
-					MType: TypeGaugeConst.String(),
-					Value: &val,
-				}
-			},
-		},
+		metJSON, err := ParseMetricJSON(metStr)
+		assert.NoError(t, err)
 
-		{
-			name: "no valid counter val",
-			metStr: MetricStr{
-				Info: Info{
-					Name:  "Counter-1",
-					MType: TypeCountConst.String(),
-				},
-				Val: "a10",
-			},
-			isErr: true,
-			fnWant: func() MetricJSON {
-				return MetricJSON{}
-			},
-		},
+		assert.Equal(t, wantJSON, metJSON)
+	})
 
-		{
-			name: "no valid gauge val",
-			metStr: MetricStr{
-				Info: Info{
-					Name:  "Gauge-1",
-					MType: TypeGaugeConst.String(),
-				},
-				Val: "a10",
-			},
-			isErr: true,
-			fnWant: func() MetricJSON {
-				return MetricJSON{}
-			},
-		},
+	t.Run("parse gauge ok", func(t *testing.T) {
+		var val = 10.01
 
-		{
-			name: "not sypport val",
-			metStr: MetricStr{
-				Info: Info{
-					Name:  "Gauge-1",
-					MType: "-",
-				},
-				Val: "a10",
-			},
-			isErr: true,
-			fnWant: func() MetricJSON {
-				return MetricJSON{}
-			},
-		},
-	}
+		wantJSON := MetricJSON{ID: "Gauge-1", MType: "gauge", Value: &val}
+		metStr := MetricStr{
+			InfoStr: InfoStr{Name: "Gauge-1", MType: "gauge"},
+			Val:     "10.01",
+		}
 
-	for _, test := range tc {
-		t.Run(test.name, func(t *testing.T) {
-			acrMet, err := ParseMetricJSON(test.metStr)
-			if test.isErr && err == nil {
-				t.Error("want err")
-			}
-			assert.Equal(t, test.fnWant(), acrMet)
-		})
+		metJSON, err := ParseMetricJSON(metStr)
+		assert.NoError(t, err)
+
+		assert.Equal(t, wantJSON, metJSON)
+	})
+
+	t.Run("parse err type not support", func(t *testing.T) {
+		metStr := MetricStr{
+			InfoStr: InfoStr{Name: "Counter-1", MType: "c"},
+			Val:     "10",
+		}
+
+		_, err := ParseMetricJSON(metStr)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+
+	t.Run("parse err not correct delta", func(t *testing.T) {
+		metStr := MetricStr{
+			InfoStr: InfoStr{Name: "Counter-1", MType: "counter"},
+			Val:     "c",
+		}
+
+		_, err := ParseMetricJSON(metStr)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+
+	t.Run("parse err not correct value", func(t *testing.T) {
+		metStr := MetricStr{
+			InfoStr: InfoStr{Name: "Gauge-1", MType: "gauge"},
+			Val:     "c",
+		}
+
+		_, err := ParseMetricJSON(metStr)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+}
+
+func TestParseMetric(t *testing.T) {
+	t.Run("parse counter ok", func(t *testing.T) {
+		var delta int64 = 10
+		metJSON := MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
+
+		wanMet := NewCounterMetric("Counter-1", delta)
+
+		met, err := ParseMetric(metJSON)
+
+		assert.NoError(t, err)
+		assert.Equal(t, wanMet, met)
+	})
+
+	t.Run("parse gauge ok", func(t *testing.T) {
+		var val = 10.01
+		metJSON := MetricJSON{ID: "Gauge-1", MType: "gauge", Value: &val}
+
+		wanMet := NewGaugeMetric("Gauge-1", val)
+
+		met, err := ParseMetric(metJSON)
+
+		assert.NoError(t, err)
+		assert.Equal(t, wanMet, met)
+	})
+
+	t.Run("parse err parseInfo ok", func(t *testing.T) {
+		var delta int64 = 10
+		metJSON := MetricJSON{ID: "", MType: "counter", Delta: &delta}
+		_, err := ParseMetric(metJSON)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+}
+
+func TestBuildArrMetric(t *testing.T) {
+	t.Run("build arr ok", func(t *testing.T) {
+		var delta int64 = 10
+		var val = 10.01
+
+		arrMetJSON := []MetricJSON{
+			{ID: "Counter-1", MType: "counter", Delta: &delta},
+			{ID: "Gauge-1", MType: "gauge", Value: &val},
+		}
+
+		wantArr := []Metric{
+			NewCounterMetric("Counter-1", 10),
+			NewGaugeMetric("Gauge-1", 10.01),
+		}
+
+		arr, err := BuildArrMetric(arrMetJSON)
+		assert.NoError(t, err)
+		assert.Equal(t, wantArr, arr)
+	})
+
+	t.Run("build arr err parse", func(t *testing.T) {
+		var delta int64 = 10
+		var val = 10.01
+
+		arrMetJSON := []MetricJSON{
+			{ID: "Counter-1", MType: "counter", Delta: &delta},
+			{ID: "", MType: "gauge", Value: &val},
+		}
+
+		_, err := BuildArrMetric(arrMetJSON)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+}
+
+func BenchmarkMetricUpdateCounter(b *testing.B) {
+	met := NewCounterMetric("Counter-1", 100)
+	val := NewCounterValue(11)
+
+	for i := 0; i < b.N; i++ {
+		met.Update(val)
 	}
 }
 
-func TestMetricJSONString(t *testing.T) {
-	type testCase struct {
-		name   string
-		fnInit func() MetricJSON
-		valStr string
-	}
+func BenchmarkMetricUpdateGauge(b *testing.B) {
+	met := NewGaugeMetric("Counter-1", 10.01)
+	val := NewGaugeValue(20.02)
 
-	tc := []testCase{
-		{
-			name: "ok counter",
-			fnInit: func() MetricJSON {
-				val := int64(10)
-				return MetricJSON{
-					ID:    "Counter-1",
-					MType: TypeCountConst.String(),
-					Delta: &val,
-				}
-			},
-			valStr: "10",
-		},
-
-		{
-			name: "ok gauge",
-			fnInit: func() MetricJSON {
-				val := float64(10.01)
-				return MetricJSON{
-					ID:    "Gauge-1",
-					MType: TypeGaugeConst.String(),
-					Value: &val,
-				}
-			},
-			valStr: "10.01",
-		},
-
-		{
-			name: "type not support",
-			fnInit: func() MetricJSON {
-				val := float64(10.01)
-				return MetricJSON{
-					ID:    "Gauge-1",
-					MType: "--",
-					Value: &val,
-				}
-			},
-			valStr: TypeNoCorrect.String(),
-		},
-	}
-
-	for _, test := range tc {
-		t.Run(test.name, func(t *testing.T) {
-			met := test.fnInit()
-			assert.Equal(t, test.valStr, met.String())
-		})
-	}
-}
-
-func TestBatchToArrMetricJSON(t *testing.T) {
-	int1 := int64(10)
-	int2 := int64(20)
-	float1 := float64(10.01)
-	float2 := float64(20.02)
-
-	initBatch := Batch{
-		CList: []MetricRepo[int64]{
-			NewMetricRepo[int64](
-				"Counter-1",
-				TypeCountConst,
-				int1,
-			),
-			NewMetricRepo[int64](
-				"Counter-2",
-				TypeCountConst,
-				int2,
-			),
-		},
-		GList: []MetricRepo[float64]{
-			NewMetricRepo[float64](
-				"Gauge-1",
-				TypeGaugeConst,
-				float1,
-			),
-			NewMetricRepo[float64](
-				"Gauge-2",
-				TypeGaugeConst,
-				float2,
-			),
-		},
-	}
-
-	wantArr := []MetricJSON{
-		{
-			ID:    "Counter-1",
-			MType: TypeCountConst.String(),
-			Value: nil,
-			Delta: &int1,
-		},
-		{
-			ID:    "Counter-2",
-			MType: TypeCountConst.String(),
-			Value: nil,
-			Delta: &int2,
-		},
-		{
-			ID:    "Gauge-1",
-			MType: TypeGaugeConst.String(),
-			Value: &float1,
-			Delta: nil,
-		},
-		{
-			ID:    "Gauge-2",
-			MType: TypeGaugeConst.String(),
-			Value: &float2,
-			Delta: nil,
-		},
-	}
-
-	assert.Equal(t, wantArr, initBatch.ToArrMetricJSON())
-}
-
-func TestInfoValid(t *testing.T) {
-	type testCase struct {
-		name  string
-		info  Info
-		isErr bool
-	}
-
-	tc := []testCase{
-		{
-			name: "ok",
-			info: Info{
-				Name:  "Name",
-				MType: "MType",
-			},
-			isErr: false,
-		},
-
-		{
-			name: "err mtype empty",
-			info: Info{
-				Name:  "Name",
-				MType: "",
-			},
-			isErr: true,
-		},
-
-		{
-			name: "err name empty",
-			info: Info{
-				Name:  "",
-				MType: "MType",
-			},
-			isErr: true,
-		},
-	}
-
-	for _, test := range tc {
-		t.Run(test.name, func(t *testing.T) {
-			err := test.info.Valid()
-
-			if test.isErr && err == nil {
-				t.Error("want err")
-			}
-		})
+	for i := 0; i < b.N; i++ {
+		met.Update(val)
 	}
 }

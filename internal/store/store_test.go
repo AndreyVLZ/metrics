@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/AndreyVLZ/metrics/internal/store/filestore"
-	"github.com/AndreyVLZ/metrics/internal/store/memstore"
+	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
 	"github.com/AndreyVLZ/metrics/internal/store/postgres"
 	"github.com/stretchr/testify/assert"
 )
@@ -19,7 +19,7 @@ func TestNew(t *testing.T) {
 	tc := []testCase{
 		{
 			name:      "memStore",
-			storeName: memstore.NameConst,
+			storeName: inmemory.NameConst,
 			cfg: Config{
 				ConnDB:    "",
 				StorePath: "",

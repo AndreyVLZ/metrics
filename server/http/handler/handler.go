@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	_ "net/http/pprof"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 )
@@ -36,7 +35,6 @@ type srvPing interface {
 	Ping() error
 }
 
-// post
 func PostJSONUpdateHandle(srv srvUpdater, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		met, err := metricFromBoby(req.Body)
@@ -93,12 +91,13 @@ func PostUpdateHandle(srv srvUpdater, log *slog.Logger, fn func(req *http.Reques
 	})
 }
 
-func GetValueHandle(srv srvGetter, log *slog.Logger, fn func(*http.Request) model.Info) http.Handler {
+func GetValueHandle(srv srvGetter, log *slog.Logger, fn func(*http.Request) model.InfoStr) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		mInfo := fn(req)
+		infoStr := fn(req)
 
-		if err := mInfo.Valid(); err != nil {
-			log.Error("getValueHandler", "valid error", err)
+		mInfo, err := model.ParseInfo(infoStr.Name, infoStr.MType)
+		if err != nil {
+			log.Error("getValueHandler", "error", err)
 			http.Error(rw, err.Error(), http.StatusBadRequest)
 
 			return
@@ -131,10 +130,9 @@ func PostValueHandle(srv srvGetter, log *slog.Logger) http.Handler {
 			return
 		}
 
-		mInfo := model.Info{MType: met.MType, Name: met.ID}
-
-		if err := mInfo.Valid(); err != nil {
-			log.Error("postValueHandler", "valid error", err)
+		mInfo, err := model.ParseInfo(met.ID, met.MType)
+		if err != nil {
+			log.Error("postValueHandler", "error", err)
 			http.Error(rw, err.Error(), http.StatusBadRequest)
 
 			return
@@ -160,19 +158,15 @@ func PostValueHandle(srv srvGetter, log *slog.Logger) http.Handler {
 func PostUpdatesHandler(srv srvBatch, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		var list []model.MetricJSON
-
 		body := req.Body
 		defer body.Close()
 
-		fmt.Printf("TYTY--1:%v\n", list)
 		if err := json.NewDecoder(body).Decode(&list); err != nil {
 			log.Error("postUpdatesHandler", "encode error", err)
 			http.Error(rw, err.Error(), http.StatusBadRequest)
-			fmt.Println("TYTY-2")
 
 			return
 		}
-		fmt.Printf("LIST::: %v\n", list)
 
 		if err := srv.AddBatch(req.Context(), list); err != nil {
 			log.Error("postUpdatesHandler", "srvAddBatch error", err)

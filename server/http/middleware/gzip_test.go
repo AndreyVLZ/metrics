@@ -11,12 +11,6 @@ import (
 func TestGzip(t *testing.T) {
 	nextHandler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte("TEST SFS"))
-		/*
-			valH := rw.Header().Get("Content-Encoding")
-			if valH != "gzip" {
-				t.Errorf("no header %v\n", valH)
-			}
-		*/
 	})
 
 	t.Run("gzip", func(t *testing.T) {
@@ -34,6 +28,10 @@ func TestGzip(t *testing.T) {
 		handTest.ServeHTTP(ht, req)
 
 		res := ht.Result()
+
+		if err := res.Body.Close(); err != nil {
+			t.Error(err)
+		}
 
 		fmt.Printf("res %v\n", res.StatusCode)
 	})

@@ -3,7 +3,6 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
-	_ "net/http/pprof"
 	"time"
 )
 

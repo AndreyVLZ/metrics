@@ -1,17 +1,31 @@
 package stats
 
 import (
+	"fmt"
+	"math/rand"
 	"runtime"
+	"sync/atomic"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 )
 
-// metricConst.
-type metricConst uint
+type Name uint
 
-// Константы поддерживаемых метрик для пакета runtime.
+const totalRuntimeMetric = 29
+
 const (
-	Alloc metricConst = iota
+	TotalMetric int = 32
+)
+
+// Константы поддерживаемых метрик:
+// 29 метрик из пакета runtime:
+// 28:[gauge], 1:[counter]
+// 3 метрики из пакета goUtil:
+// 3:[gauge]
+const (
+	Alloc Name = iota
 	BuckHashSys
 	Frees
 	GCSys
@@ -38,12 +52,16 @@ const (
 	NumForcedGC
 	NumGC
 	GCCPUFraction
+	RandomValue
+	PollCount // total runtime
+	TotalMemory
+	FreeMemory
+	CPUutilization1
 )
 
-// supportName Получение массива имен поддерживаемых метрик.
-func supportName() []string {
-	return []string{
-		// int64
+func supportName() [TotalMetric]string {
+	return [TotalMetric]string{
+		// [runtime] int64
 		"Alloc", "BuckHashSys", "Frees", "GCSys", "HeapAlloc", "HeapIdle",
 		"HeapInuse", "HeapObjects", "HeapReleased", "HeapSys", "LastGC", "Lookups",
 		"MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs", "NextGC",
@@ -51,78 +69,134 @@ func supportName() []string {
 		// int32
 		"NumForcedGC", "NumGC",
 		// float64
-		"GCCPUFraction",
+		"GCCPUFraction", "RandomValue",
+		// int64
+		"PollCount",
+		// [util] uint64
+		"TotalMemory", "FreeMemory",
+		// int
+		"CPUutilization1",
 	}
 }
 
-// String Возвращает имя метрики.
-func (mc metricConst) String() string {
-	return supportName()[mc]
-}
+func (n Name) String() string { return supportName()[n] }
 
-// stats.
+var (
+	arrFuncUtilRead = []func(*utilStats) float64{
+		func(u *utilStats) float64 { return float64(u.memStats.Available) },
+		func(u *utilStats) float64 { return float64(u.memStats.Free) },
+		func(_ *utilStats) float64 { cpuCount, _ := cpu.Counts(true); return float64(cpuCount) },
+	}
+
+	arrFuncRuntimeRead = []func(*runtimeStats) float64{
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Alloc) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.BuckHashSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Frees) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.GCSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.HeapAlloc) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.HeapIdle) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.HeapInuse) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.HeapObjects) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.HeapReleased) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.HeapSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.LastGC) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Lookups) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.MCacheInuse) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.MCacheSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.MSpanInuse) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.MSpanSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Mallocs) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.NextGC) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.OtherSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.PauseTotalNs) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.StackInuse) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.StackSys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.Sys) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.TotalAlloc) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.NumForcedGC) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return float64(s.memStats.NumGC) },
+		func(s *runtimeStats) float64 { s.total.Add(1); return s.memStats.GCCPUFraction },
+		func(_ *runtimeStats) float64 { return rand.ExpFloat64() },
+	}
+)
+
 type Stats struct {
-	memStats runtime.MemStats
-	total    int64
+	rtStats   *runtimeStats
+	utilStats utilStats
 }
 
 func New() *Stats {
+	return &Stats{
+		rtStats:   newRuntimeStats(),
+		utilStats: utilStats{},
+	}
+}
+
+func (s *Stats) Init() error { return s.utilStats.Init() }
+
+func (s *Stats) UtilList() []model.Metric {
+	return s.readList(TotalMemory, CPUutilization1)
+}
+
+func (s *Stats) RuntimeList() []model.Metric {
+	return s.readList(Alloc, PollCount)
+}
+
+func (s *Stats) readList(start, stop Name) []model.Metric {
+	list := make([]model.Metric, 0, stop-start)
+
+	for iName := start; iName <= stop; iName++ {
+		list = append(list, s.readMetric(iName))
+	}
+
+	return list
+}
+
+func (s *Stats) readMetric(metName Name) model.Metric {
+	switch {
+	case metName >= Alloc && metName <= RandomValue:
+		runtime.ReadMemStats(&s.rtStats.memStats)
+
+		val := arrFuncRuntimeRead[metName]
+		aval := val(s.rtStats)
+
+		return model.NewGaugeMetric(metName.String(), aval)
+	case metName >= TotalMemory && metName <= CPUutilization1:
+		l := metName - totalRuntimeMetric
+		val := arrFuncUtilRead[l]
+		aval := val(&s.utilStats)
+
+		return model.NewGaugeMetric(metName.String(), aval)
+	default:
+		return model.NewCounterMetric(metName.String(), s.rtStats.total.Load())
+	}
+}
+
+type runtimeStats struct {
+	memStats runtime.MemStats
+	total    atomic.Int64
+}
+
+func newRuntimeStats() *runtimeStats {
 	var memStats runtime.MemStats
 
-	return &Stats{
+	return &runtimeStats{
 		memStats: memStats,
-		total:    0,
+		total:    atomic.Int64{},
 	}
 }
 
-func (s *Stats) BuildBatch() (model.Batch, error) {
-	supportName := supportName()
-	arrFuncRead := s.arrFuncRead()
-
-	listGauge := make([]model.MetricRepo[float64], len(supportName))
-
-	for i := range supportName {
-		listGauge[i] = model.NewMetricRepo(
-			supportName[i], model.TypeGaugeConst, arrFuncRead[i]())
-	}
-
-	listCount := []model.MetricRepo[int64]{
-		model.NewMetricRepo("PollCount", model.TypeCountConst, s.total),
-	}
-
-	return model.Batch{CList: listCount, GList: listGauge}, nil
+type utilStats struct {
+	memStats *mem.VirtualMemoryStat
 }
 
-func (s *Stats) arrFuncRead() []func() float64 {
-	runtime.ReadMemStats(&s.memStats)
-
-	return []func() float64{
-		func() float64 { s.total++; return float64(s.memStats.Alloc) },
-		func() float64 { s.total++; return float64(s.memStats.BuckHashSys) },
-		func() float64 { s.total++; return float64(s.memStats.Frees) },
-		func() float64 { s.total++; return float64(s.memStats.GCSys) },
-		func() float64 { s.total++; return float64(s.memStats.HeapAlloc) },
-		func() float64 { s.total++; return float64(s.memStats.HeapIdle) },
-		func() float64 { s.total++; return float64(s.memStats.HeapInuse) },
-		func() float64 { s.total++; return float64(s.memStats.HeapObjects) },
-		func() float64 { s.total++; return float64(s.memStats.HeapReleased) },
-		func() float64 { s.total++; return float64(s.memStats.HeapSys) },
-		func() float64 { s.total++; return float64(s.memStats.LastGC) },
-		func() float64 { s.total++; return float64(s.memStats.Lookups) },
-		func() float64 { s.total++; return float64(s.memStats.MCacheInuse) },
-		func() float64 { s.total++; return float64(s.memStats.MCacheSys) },
-		func() float64 { s.total++; return float64(s.memStats.MSpanInuse) },
-		func() float64 { s.total++; return float64(s.memStats.MSpanSys) },
-		func() float64 { s.total++; return float64(s.memStats.Mallocs) },
-		func() float64 { s.total++; return float64(s.memStats.NextGC) },
-		func() float64 { s.total++; return float64(s.memStats.OtherSys) },
-		func() float64 { s.total++; return float64(s.memStats.PauseTotalNs) },
-		func() float64 { s.total++; return float64(s.memStats.StackInuse) },
-		func() float64 { s.total++; return float64(s.memStats.StackSys) },
-		func() float64 { s.total++; return float64(s.memStats.Sys) },
-		func() float64 { s.total++; return float64(s.memStats.TotalAlloc) },
-		func() float64 { s.total++; return float64(s.memStats.NumForcedGC) },
-		func() float64 { s.total++; return float64(s.memStats.NumGC) },
-		func() float64 { s.total++; return s.memStats.GCCPUFraction },
+func (us *utilStats) Init() error {
+	vmStats, err := mem.VirtualMemory()
+	if err != nil {
+		return fmt.Errorf("%w", err)
 	}
+
+	us.memStats = vmStats
+
+	return nil
 }

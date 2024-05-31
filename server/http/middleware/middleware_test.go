@@ -52,6 +52,10 @@ func fnCheck(t *testing.T, tName string, val string, fn func(http.Handler) http.
 
 			res := ht.Result()
 
+			if err := res.Body.Close(); err != nil {
+				t.Error(err)
+			}
+
 			assert.Equal(t, test.statusCode, res.StatusCode)
 		})
 	}

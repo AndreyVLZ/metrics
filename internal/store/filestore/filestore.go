@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	_ "net/http/pprof"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
@@ -13,16 +12,12 @@ import (
 const NameConst = "file store"
 
 type storage interface {
-	Name() string
-	Ping() error
+	Get(ctx context.Context, mInfo model.Info) (model.Metric, error)
+	Update(ctx context.Context, met model.Metric) (model.Metric, error)
+	List(ctx context.Context) ([]model.Metric, error)
+	AddBatch(ctx context.Context, arr []model.Metric) error
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
-	UpdateCounter(ctx context.Context, met model.MetricRepo[int64]) (model.MetricRepo[int64], error)
-	UpdateGauge(ctx context.Context, met model.MetricRepo[float64]) (model.MetricRepo[float64], error)
-	GetCounter(ctx context.Context, name string) (model.MetricRepo[int64], error)
-	GetGauge(ctx context.Context, name string) (model.MetricRepo[float64], error)
-	AddBatch(ctx context.Context, batch model.Batch) error
-	List(ctx context.Context) (model.Batch, error)
 }
 
 type Config struct {
@@ -31,10 +26,18 @@ type Config struct {
 	StoreInt  int
 }
 
+type iFile interface {
+	WriteMetric(met model.Metric) error
+	WriteBatch(arr []model.Metric) error
+	ReadBatch() ([]model.Metric, error)
+	Open() error
+	Close() error
+}
+
 type FileStore struct {
 	storage
 	cfg      Config
-	file     *File
+	file     iFile
 	isDeamon bool
 	exit     chan struct{}
 }
@@ -50,11 +53,14 @@ func New(cfg Config, store storage) *FileStore {
 }
 
 func (fs FileStore) Name() string { return NameConst }
-func (fs FileStore) Ping() error  { return nil }
 
 func (fs *FileStore) Start(ctx context.Context) error {
 	if err := fs.file.Open(); err != nil {
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("file Open: %w", err)
+	}
+
+	if err := fs.storage.Start(ctx); err != nil {
+		return fmt.Errorf("store Start: %w", err)
 	}
 
 	if fs.cfg.IsRestore {
@@ -121,61 +127,11 @@ func (fs *FileStore) run(ctx context.Context) {
 	}
 }
 
-func saved(ctx context.Context, store storage, file *File) error {
+func saved(ctx context.Context, store storage, file iFile) error {
 	batch, err := store.List(ctx)
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
 	return file.WriteBatch(batch)
-}
-
-type wrapStore struct {
-	file *File
-	storage
-}
-
-func newWrapStore(file *File, s storage) *wrapStore {
-	return &wrapStore{
-		file:    file,
-		storage: s,
-	}
-}
-
-func (ws *wrapStore) UpdateCounter(ctx context.Context, met model.MetricRepo[int64]) (model.MetricRepo[int64], error) {
-	met, err := ws.storage.UpdateCounter(ctx, met)
-	if err != nil {
-		return model.MetricRepo[int64]{}, fmt.Errorf("%w", err)
-	}
-
-	if err := ws.file.WriteMetric(buildMetric(met)); err != nil {
-		log.Printf("file write count %s\n", err)
-	}
-
-	return met, nil
-}
-
-func (ws *wrapStore) UpdateGauge(ctx context.Context, met model.MetricRepo[float64]) (model.MetricRepo[float64], error) {
-	met, err := ws.storage.UpdateGauge(ctx, met)
-	if err != nil {
-		return model.MetricRepo[float64]{}, fmt.Errorf("%w", err)
-	}
-
-	if err := ws.file.WriteMetric(buildMetric(met)); err != nil {
-		log.Printf("file write gauge %s\n", err)
-	}
-
-	return met, nil
-}
-
-func (ws *wrapStore) AddBatch(ctx context.Context, batch model.Batch) error {
-	if err := ws.storage.AddBatch(ctx, batch); err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
-	if err := ws.file.WriteBatch(batch); err != nil {
-		log.Printf("FileStore: %s\n", err)
-	}
-
-	return nil
 }

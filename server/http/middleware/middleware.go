@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	_ "net/http/pprof"
 )
 
 const (

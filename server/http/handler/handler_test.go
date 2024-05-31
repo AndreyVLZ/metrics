@@ -3,19 +3,15 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"html/template"
 	"io"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
-	"github.com/AndreyVLZ/metrics/internal/store/memstore"
-	"github.com/AndreyVLZ/metrics/server/service"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -158,7 +154,7 @@ func TestPostUpdateHandle(t *testing.T) {
 			name: "ok counter",
 			fnParse: func(req *http.Request) model.MetricStr {
 				return model.MetricStr{
-					Info: model.Info{
+					InfoStr: model.InfoStr{
 						Name:  "Count-1",
 						MType: "counter",
 					},
@@ -174,7 +170,7 @@ func TestPostUpdateHandle(t *testing.T) {
 			name: "ok gauge",
 			fnParse: func(req *http.Request) model.MetricStr {
 				return model.MetricStr{
-					Info: model.Info{
+					InfoStr: model.InfoStr{
 						Name:  "Gauge-1",
 						MType: "gauge",
 					},
@@ -190,7 +186,7 @@ func TestPostUpdateHandle(t *testing.T) {
 			name: "err not valide url",
 			fnParse: func(req *http.Request) model.MetricStr {
 				return model.MetricStr{
-					Info: model.Info{
+					InfoStr: model.InfoStr{
 						Name:  "Gauge-1",
 						MType: "gauge",
 					},
@@ -205,7 +201,7 @@ func TestPostUpdateHandle(t *testing.T) {
 			name: "err srv",
 			fnParse: func(req *http.Request) model.MetricStr {
 				return model.MetricStr{
-					Info: model.Info{
+					InfoStr: model.InfoStr{
 						Name:  "Count-1",
 						MType: "counter",
 					},
@@ -252,7 +248,7 @@ func TestGetValueHandle(t *testing.T) {
 	type testCase struct {
 		name    string
 		url     string
-		fnParse func(req *http.Request) model.Info
+		fnParse func(req *http.Request) model.InfoStr
 		status  int
 		header  string
 		fnSrv   func() srvGetter
@@ -262,9 +258,9 @@ func TestGetValueHandle(t *testing.T) {
 		{
 			name: "ok counter",
 			url:  "/value/counter/",
-			fnParse: func(req *http.Request) model.Info {
-				return model.Info{
-					Name:  "Count-1",
+			fnParse: func(req *http.Request) model.InfoStr {
+				return model.InfoStr{
+					Name:  "PollCount",
 					MType: "counter",
 				}
 			},
@@ -274,7 +270,7 @@ func TestGetValueHandle(t *testing.T) {
 				val := int64(100)
 				return fakeSrv{
 					mJSON: model.MetricJSON{
-						ID:    "Counter-1",
+						ID:    "PollCount",
 						MType: "counter",
 						Delta: &val,
 					},
@@ -285,9 +281,9 @@ func TestGetValueHandle(t *testing.T) {
 		{
 			name: "ok gauge",
 			url:  "/value/gauge/",
-			fnParse: func(req *http.Request) model.Info {
-				return model.Info{
-					Name:  "Gauge-1",
+			fnParse: func(req *http.Request) model.InfoStr {
+				return model.InfoStr{
+					Name:  "Alloc",
 					MType: "gauge",
 				}
 			},
@@ -297,7 +293,7 @@ func TestGetValueHandle(t *testing.T) {
 				val := float64(100.001)
 				return fakeSrv{
 					mJSON: model.MetricJSON{
-						ID:    "Gauge-1",
+						ID:    "Alloc",
 						MType: "gauge",
 						Value: &val,
 					},
@@ -308,8 +304,8 @@ func TestGetValueHandle(t *testing.T) {
 		{
 			name: "err parse url",
 			url:  "/value/counter/",
-			fnParse: func(req *http.Request) model.Info {
-				return model.Info{
+			fnParse: func(req *http.Request) model.InfoStr {
+				return model.InfoStr{
 					Name:  "",
 					MType: "",
 				}
@@ -330,9 +326,9 @@ func TestGetValueHandle(t *testing.T) {
 		{
 			name: "err srv",
 			url:  "/value/counter/",
-			fnParse: func(req *http.Request) model.Info {
-				return model.Info{
-					Name:  "Count-1",
+			fnParse: func(req *http.Request) model.InfoStr {
+				return model.InfoStr{
+					Name:  "PollCount",
 					MType: "counter",
 				}
 			},
@@ -390,7 +386,7 @@ func TestPostValueHandle(t *testing.T) {
 		{
 			name: "counter ok",
 			body: strings.NewReader(
-				`{"id":"Counter-1","type":"counter","delta":100}`,
+				`{"id":"PollCount","type":"counter","delta":100}`,
 			),
 			status: http.StatusOK,
 			header: ApplicationJSONConst,
@@ -398,7 +394,7 @@ func TestPostValueHandle(t *testing.T) {
 				val := int64(100)
 				return fakeSrv{
 					mJSON: model.MetricJSON{
-						ID:    "Counter-1",
+						ID:    "PollCount",
 						MType: "counter",
 						Delta: &val,
 					},
@@ -409,7 +405,7 @@ func TestPostValueHandle(t *testing.T) {
 		{
 			name: "gauge ok",
 			body: strings.NewReader(
-				`{"id":"Gauge-1","type":"gauge","value":10.01}`,
+				`{"id":"Alloc","type":"gauge","value":10.01}`,
 			),
 			status: http.StatusOK,
 			header: ApplicationJSONConst,
@@ -417,7 +413,7 @@ func TestPostValueHandle(t *testing.T) {
 				val := float64(100.001)
 				return fakeSrv{
 					mJSON: model.MetricJSON{
-						ID:    "Gauge-1",
+						ID:    "Alloc",
 						MType: "gauge",
 						Value: &val,
 					},
@@ -431,14 +427,7 @@ func TestPostValueHandle(t *testing.T) {
 			status: http.StatusBadRequest,
 			header: ApplicationJSONConst,
 			fnSrv: func() srvGetter {
-				val := int64(100)
-				return fakeSrv{
-					mJSON: model.MetricJSON{
-						ID:    "Counter-1",
-						MType: "counter",
-						Delta: &val,
-					},
-				}
+				return fakeSrv{}
 			},
 		},
 
@@ -449,39 +438,25 @@ func TestPostValueHandle(t *testing.T) {
 			),
 			status: http.StatusBadRequest,
 			fnSrv: func() srvGetter {
-				val := int64(100)
-				return fakeSrv{
-					mJSON: model.MetricJSON{
-						ID:    "Counter-1",
-						MType: "counter",
-						Delta: &val,
-					},
-				}
+				return fakeSrv{}
 			},
 		},
 
 		{
 			name: "err mType empty",
 			body: strings.NewReader(
-				`{"id":"Counter-1","type":"","delta":100}`,
+				`{"id":"Alloc","type":"","delta":100}`,
 			),
 			status: http.StatusBadRequest,
 			fnSrv: func() srvGetter {
-				val := int64(100)
-				return fakeSrv{
-					mJSON: model.MetricJSON{
-						ID:    "Counter-1",
-						MType: "counter",
-						Delta: &val,
-					},
-				}
+				return fakeSrv{}
 			},
 		},
 
 		{
 			name: "srv custom err",
 			body: strings.NewReader(
-				`{"id":"Counter-1","type":"counter","delta":100}`,
+				`{"id":"PollCount","type":"counter","delta":100}`,
 			),
 			status: http.StatusNotFound,
 			fnSrv: func() srvGetter {
@@ -535,7 +510,7 @@ func TestPostUpdatesHandler(t *testing.T) {
 		{
 			name: "ok",
 			body: strings.NewReader(
-				`[{"id":"Counter-1","type":"counter","delta":100},{"id":"Gauge-1","type":"gauge","value":10.01}]`,
+				`[{"id":"PollCount","type":"counter","delta":100},{"id":"Alloc","type":"gauge","value":10.01}]`,
 			),
 			status: http.StatusOK,
 			srv:    fakeSrv{},
@@ -551,7 +526,7 @@ func TestPostUpdatesHandler(t *testing.T) {
 		{
 			name: "err srv",
 			body: strings.NewReader(
-				`[{"id":"Counter-1","type":"counter","delta":100},{"id":"Gauge-1","type":"gauge","value":10.01}]`,
+				`[{"id":"PollCount","type":"counter","delta":100},{"id":"Alloc","type":"gauge","value":10.01}]`,
 			),
 			status: http.StatusBadRequest,
 			srv:    fakeSrv{err: errors.New("srv custom err")},
@@ -610,12 +585,12 @@ func TestListHandle(t *testing.T) {
 				return fakeSrv{
 					arrMetJSON: []model.MetricJSON{
 						{
-							ID:    "Counter-1",
+							ID:    "PollCount",
 							MType: "counter",
 							Delta: &val,
 						},
 						{
-							ID:    "Gauge-1",
+							ID:    "Alloc",
 							MType: "gauge",
 							Value: &val2,
 						},
@@ -724,54 +699,5 @@ func TestPingHandler(t *testing.T) {
 				return
 			}
 		})
-	}
-}
-
-func buildData() io.Reader {
-	str := fmt.Sprintf(
-		`{"id":"A-%d","type":"%s","delta":%d}`,
-		randRange(1, 100),
-		//model.TypeMetric(randRange(1, 2)).String(),
-		model.TypeCountConst.String(),
-		randRange(1, 10000),
-	)
-
-	//fmt.Println(str)
-
-	return strings.NewReader(str)
-}
-
-func randRange(min, max int) int {
-	return rand.Intn(max+1-min) + min
-}
-
-func BenchmarkPostJSONUpdateHandler(b *testing.B) {
-	type testCase struct {
-		name   string
-		body   io.Reader
-		status int
-		header string
-		srv    srvUpdater
-	}
-
-	ctx := context.Background()
-
-	store := memstore.New()
-	log := slog.Default()
-	srv := service.New(store)
-
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		body := buildData()
-		req := httptest.NewRequest(
-			http.MethodPost, "/update/",
-			body,
-		).WithContext(ctx)
-
-		b.StartTimer()
-
-		rw := httptest.NewRecorder()
-		handler := PostJSONUpdateHandle(srv, log)
-		handler.ServeHTTP(rw, req)
 	}
 }

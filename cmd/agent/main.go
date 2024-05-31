@@ -4,12 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
-	"os"
-	"os/signal"
+	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
 	arg "github.com/AndreyVLZ/metrics/internal/argument"
-	"github.com/AndreyVLZ/metrics/internal/store/memstore"
+	"github.com/AndreyVLZ/metrics/internal/log/zap"
+	"github.com/AndreyVLZ/metrics/internal/shutdown"
+	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
 )
 
 func main() {
@@ -18,7 +19,7 @@ func main() {
 		rateLimit      = agent.RateLimitDefault
 		pollInterval   = agent.PollIntervalDefault
 		reportInterval = agent.ReportIntervalDefault
-		key            = ""
+		key            = agent.KeyDafault
 	)
 
 	args := arg.Array(
@@ -75,34 +76,13 @@ func main() {
 }
 
 func run(cfg *agent.Config) {
-	ctx := context.Background()
+	var timeout time.Duration = 7
 
-	agent := agent.New(cfg, memstore.New())
+	logger := zap.New(zap.DefaultConfig())
+	agent := agent.New(cfg, inmemory.New(), logger)
+	shutdown := shutdown.New(agent, timeout)
 
-	ctxSinal, stopSignal := signal.NotifyContext(ctx, os.Interrupt)
-	chErr := make(chan error)
-
-	go func(ce chan<- error) {
-		defer close(ce)
-		ce <- agent.Start(ctxSinal)
-	}(chErr)
-
-	select {
-	case <-ctxSinal.Done():
-		log.Println("signal")
-	case err := <-chErr:
-		stopSignal()
-
-		if err != nil {
-			log.Printf("agent start err %v\n", err)
-		}
+	if err := shutdown.Start(context.Background()); err != nil {
+		log.Printf("start agent error: %v\n", err)
 	}
-
-	if err := agent.Stop(ctx); err != nil {
-		log.Printf("agent stop err: %v\n", err)
-	} else {
-		log.Println("all services stopped")
-	}
-
-	log.Println("agent stopped")
 }

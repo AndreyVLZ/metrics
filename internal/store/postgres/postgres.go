@@ -12,44 +12,61 @@ import (
 )
 
 const (
-	NameConst        = "postgres store"
-	nameTableCounter = "counter"
-	nameTableGauge   = "gauge"
+	NameConst = "postgres store"
+)
+
+var (
+	errNotFind        = errors.New("not find")
+	errDeltaNotValid  = errors.New("delta not valid")
+	errValueNotValid  = errors.New("value not valid")
+	errTypeNotSupport = errors.New("type not support")
 )
 
 const (
-	getSQL       = "SELECT name,type_id,val FROM %s WHERE name=$1"
-	setSQL       = "INSERT INTO %s (name,val) VALUES ($1,$2)"
-	updateSQL    = "UPDATE %s SET val = $2 WHERE name = $1"
-	listSQL      = "SELECT c.name,c.type_id,c.val FROM %s c LEFT JOIN mtype mt USING (type_id)"
-	createTables = `
-CREATE TABLE IF NOT EXISTS mtype (
+	getSQL          = "SELECT type_id,mname,delta,val FROM metric WHERE type_id=$1 AND mname=$2"
+	setSQL          = "INSERT INTO metric (type_id,mname,delta,val) VALUES ($1,$2,$3,$4)"
+	updSQL          = "UPDATE metric SET delta=$3, val=$4 WHERE type_id=$1 AND mname=$2"
+	listSQL         = "SELECT type_id,mname,delta,val FROM metric"
+	createTablesSQL = `
+CREATE TABLE mettype (
 	type_id integer,
-	name_type varchar(10),
+	mtype varchar(20),
 	PRIMARY KEY (type_id),
-	UNIQUE(name_type)
+	UNIQUE(mtype)
 );
-CREATE TABLE IF NOT EXISTS counter (
-	type_id integer NOT NULL DEFAULT 1 REFERENCES mtype(type_id),
-	name varchar(50) NOT NULL,
-	val bigint,
-	UNIQUE (name),
-	PRIMARY KEY (name)
-);
-CREATE TABLE IF NOT EXISTS gauge (
-	type_id integer NOT NULL DEFAULT 2 REFERENCES mtype(type_id),
-	name varchar(50) NOT NULL,
+CREATE TABLE metric (
+	type_id integer NOT NULL REFERENCES mettype(type_id),
+	mname varchar(50),
+	delta bigint,
 	val double precision,
-	UNIQUE (name),
-	PRIMARY KEY (name)
+	PRIMARY KEY (type_id,mname),
+	UNIQUE(type_id,mname)
 );`
 )
 
-type DBTX interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+type metricDB struct {
+	Info  model.Info
+	Delta sql.NullInt64
+	Value sql.NullFloat64
+}
+
+func (m metricDB) BuildMetric() (model.Metric, error) {
+	switch m.Info.MType {
+	case model.TypeCountConst:
+		if !m.Delta.Valid {
+			return model.Metric{}, errDeltaNotValid
+		}
+
+		return model.NewCounterMetric(m.Info.MName, m.Delta.Int64), nil
+	case model.TypeGaugeConst:
+		if !m.Value.Valid {
+			return model.Metric{}, errValueNotValid
+		}
+
+		return model.NewGaugeMetric(m.Info.MName, m.Value.Float64), nil
+	default:
+		return model.Metric{}, errTypeNotSupport
+	}
 }
 
 type Config struct {
@@ -57,38 +74,17 @@ type Config struct {
 }
 
 type Postgres struct {
-	cfg   Config
-	db    *sql.DB
-	cRepo Repo[int64]
-	gRepo Repo[float64]
+	cfg Config
+	db  *sql.DB
 }
 
 func New(cfg Config) *Postgres {
-	return &Postgres{
-		cfg:   cfg,
-		cRepo: newRepo[int64](nameTableCounter),
-		gRepo: newRepo[float64](nameTableGauge),
-		// getSQL:    fmt.Sprintf(getSQL, nameTableCounter),
-		// setSQL:    fmt.Sprintf(setSQL, nameTableCounter),
-		// updateSQL: fmt.Sprintf(updateSQL, nameTableCounter),
-		// listSQL:   fmt.Sprintf(listSQL, nameTableCounter),
-		//
-		// getSQL:    fmt.Sprintf(getSQL, nameTableGauge),
-		// setSQL:    fmt.Sprintf(setSQL, nameTableGauge),
-		// updateSQL: fmt.Sprintf(updateSQL, nameTableGauge),
-		// listSQL:   fmt.Sprintf(listSQL, nameTableGauge),
-	}
+	return &Postgres{cfg: cfg}
 }
 
 func (s *Postgres) Name() string                 { return NameConst }
-func (s *Postgres) Stop(_ context.Context) error { return s.db.Close() }
 func (s *Postgres) Ping() error                  { return s.db.Ping() }
-
-func (s *Postgres) setDatabase(db *sql.DB) {
-	s.db = db
-	s.cRepo.db = db
-	s.gRepo.db = db
-}
+func (s *Postgres) Stop(_ context.Context) error { return s.db.Close() }
 
 func (s *Postgres) Start(ctx context.Context) error {
 	database, err := sql.Open("postgres", s.cfg.ConnDB)
@@ -96,79 +92,92 @@ func (s *Postgres) Start(ctx context.Context) error {
 		return fmt.Errorf("openDB [%s]: %w", s.cfg.ConnDB, err)
 	}
 
-	s.setDatabase(database)
+	s.db = database
 
 	if err := s.createTable(ctx); err != nil {
-		log.Printf("tables: %w", err)
+		log.Printf("create tables err: %v\n", err)
 	}
 
 	return nil
 }
 
-func (s *Postgres) GetCounter(ctx context.Context, name string) (model.MetricRepo[int64], error) {
-	return s.cRepo.Get(ctx, name)
-}
+func (s *Postgres) List(ctx context.Context) ([]model.Metric, error) {
+	var metDB metricDB
 
-func (s *Postgres) GetGauge(ctx context.Context, name string) (model.MetricRepo[float64], error) {
-	return s.gRepo.Get(ctx, name)
-}
+	arr := make([]model.Metric, 0)
 
-func (s *Postgres) UpdateCounter(ctx context.Context, met model.MetricRepo[int64]) (model.MetricRepo[int64], error) {
-	return s.cRepo.Update(ctx, met)
-}
-
-func (s *Postgres) UpdateGauge(ctx context.Context, met model.MetricRepo[float64]) (model.MetricRepo[float64], error) {
-	return s.gRepo.Update(ctx, met)
-}
-
-func (s *Postgres) List(ctx context.Context) (model.Batch, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	listStmt, err := s.db.PrepareContext(ctx, listSQL)
 	if err != nil {
-		return model.Batch{}, fmt.Errorf("txBegin: %w", err)
+		return nil, fmt.Errorf("prepare listSQL: %w", err)
 	}
+	defer listStmt.Close()
 
-	batch, err := s.listTx(ctx, tx)
+	rows, err := listStmt.QueryContext(ctx)
 	if err != nil {
-		if errRoll := tx.Rollback(); errRoll != nil {
-			err = errors.Join(err, fmt.Errorf("txRollback: %w", errRoll))
+		return nil, fmt.Errorf("rowsErr: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		dest := []any{
+			&metDB.Info.MType,
+			&metDB.Info.MName,
+			&metDB.Delta,
+			&metDB.Value,
 		}
 
-		return model.Batch{}, fmt.Errorf("list: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return model.Batch{}, fmt.Errorf("txCommit: %w", err)
-	}
-
-	return batch, nil
-}
-
-func (s *Postgres) listTx(ctx context.Context, dbtx DBTX) (model.Batch, error) {
-	cList, err := s.cRepo.list(ctx, dbtx)
-	if err != nil {
-		return model.Batch{}, fmt.Errorf("crepo list: %w", err)
-	}
-
-	gList, err := s.gRepo.list(ctx, dbtx)
-	if err != nil {
-		return model.Batch{}, fmt.Errorf("grepo list: %w", err)
-	}
-
-	return model.Batch{CList: cList, GList: gList}, nil
-}
-
-func (s *Postgres) AddBatch(ctx context.Context, batch model.Batch) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("tx: %w", err)
-	}
-
-	if err := s.addBatchTx(ctx, tx, batch); err != nil {
-		if errRoll := tx.Rollback(); errRoll != nil {
-			err = errors.Join(err, fmt.Errorf("txRollback: %w", errRoll))
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("row scan: %w", err)
 		}
 
-		return fmt.Errorf("adder: %w", err)
+		met, err := metDB.BuildMetric()
+		if err != nil {
+			return nil, fmt.Errorf("%w", err)
+		}
+
+		arr = append(arr, met)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("rowsErr: %w", err)
+	}
+
+	return arr, nil
+}
+
+func (s *Postgres) AddBatch(ctx context.Context, arr []model.Metric) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	getStmt, err := tx.PrepareContext(ctx, getSQL)
+	if err != nil {
+		return fmt.Errorf("prepare getSQL: %w", err)
+	}
+	defer getStmt.Close()
+
+	setStmt, err := tx.PrepareContext(ctx, setSQL)
+	if err != nil {
+		return fmt.Errorf("preapare setSQL: %w", err)
+	}
+	defer setStmt.Close()
+
+	updStmt, err := tx.PrepareContext(ctx, updSQL)
+	if err != nil {
+		return fmt.Errorf("prepare updSQL: %w", err)
+	}
+	defer updStmt.Close()
+
+	for i := range arr {
+		if _, err := update(ctx, getStmt, setStmt, updStmt, arr[i]); err != nil {
+			if errRoll := tx.Rollback(); errRoll != nil {
+				err = errors.Join(err, fmt.Errorf("txRollback: %w", errRoll))
+			}
+
+			return fmt.Errorf("%w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -178,36 +187,141 @@ func (s *Postgres) AddBatch(ctx context.Context, batch model.Batch) error {
 	return nil
 }
 
-func (s *Postgres) addBatchTx(ctx context.Context, dbtx DBTX, batch model.Batch) error {
-	if err := s.cRepo.addList(ctx, dbtx, batch.CList); err != nil {
-		return fmt.Errorf("crepo adder list: %w", err)
+func (s *Postgres) Get(ctx context.Context, mInfo model.Info) (model.Metric, error) {
+	getStmt, err := s.db.PrepareContext(ctx, getSQL)
+	if err != nil {
+		return model.Metric{}, fmt.Errorf("prepare getSQL: %w", err)
 	}
 
-	if err := s.gRepo.addList(ctx, dbtx, batch.GList); err != nil {
-		return fmt.Errorf("grepo adder list: %w", err)
+	return get(ctx, getStmt, mInfo)
+}
+
+func (s *Postgres) Update(ctx context.Context, met model.Metric) (model.Metric, error) {
+	getStmt, err := s.db.PrepareContext(ctx, getSQL)
+	if err != nil {
+		return model.Metric{}, fmt.Errorf("prepare getSQL: %w", err)
+	}
+
+	setStmt, err := s.db.PrepareContext(ctx, setSQL)
+	if err != nil {
+		return model.Metric{}, fmt.Errorf("prepare setSQL: %w", err)
+	}
+
+	updStmt, err := s.db.PrepareContext(ctx, updSQL)
+	if err != nil {
+		return model.Metric{}, fmt.Errorf("prepare updSQL: %w", err)
+	}
+
+	return update(ctx, getStmt, setStmt, updStmt, met)
+}
+
+func update(ctx context.Context, getStmt, setStmt, updStmt *sql.Stmt, met model.Metric) (model.Metric, error) {
+	metRes, err := get(ctx, getStmt, met.Info)
+	if err != nil {
+		if errors.Is(err, errNotFind) { // set
+			return upset(ctx, setStmt, met)
+		}
+
+		return model.Metric{}, fmt.Errorf("getErr: %w", err)
+	}
+
+	// update && set
+	if err := metRes.Update(met.Value); err != nil {
+		return model.Metric{}, fmt.Errorf("updErr: %w", err)
+	}
+
+	return upset(ctx, updStmt, metRes)
+}
+
+func upset(ctx context.Context, upsetStmt *sql.Stmt, met model.Metric) (model.Metric, error) {
+	args := []any{
+		met.MType,
+		met.MName,
+		met.Delta,
+		met.Val,
+	}
+
+	if _, err := upsetStmt.ExecContext(ctx, args...); err != nil {
+		return model.Metric{}, fmt.Errorf("upsetErr: %w", err)
+	}
+
+	return met, nil
+}
+
+func get(ctx context.Context, getStmt *sql.Stmt, mInfo model.Info) (model.Metric, error) {
+	var metDB metricDB
+
+	args := []any{
+		mInfo.MType,
+		mInfo.MName,
+	}
+
+	dest := []any{
+		&metDB.Info.MType,
+		&metDB.Info.MName,
+		&metDB.Delta,
+		&metDB.Value,
+	}
+
+	if err := getStmt.QueryRowContext(ctx, args...).Scan(dest...); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return model.Metric{}, errNotFind
+		}
+
+		return model.Metric{}, fmt.Errorf("%w", err)
+	}
+
+	met, err := metDB.BuildMetric()
+	if err != nil {
+		return model.Metric{}, fmt.Errorf("%w", err)
+	}
+
+	return met, nil
+}
+
+func (s *Postgres) createTable(ctx context.Context) error {
+	fmt.Println("TYT")
+	isExist, err := s.checkTable(ctx, "metric")
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	if isExist {
+		return nil
+	}
+
+	if _, err := s.db.ExecContext(ctx, createTablesSQL); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	if err := s.addTypes(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
 
 	return nil
 }
 
-func (s *Postgres) createTable(ctx context.Context) error {
-	setTypeSQL := "INSERT INTO mtype (type_id, name_type) VALUES ($1,$2) ON CONFLICT (name_type) DO NOTHING"
+func (s *Postgres) checkTable(ctx context.Context, nameTable string) (bool, error) {
+	var n int64
 
-	if _, err := s.db.ExecContext(ctx, createTables); err != nil {
-		return fmt.Errorf("create table: %w", err)
+	sqlCheckSQL := "select 1 from information_schema.tables where table_name =$1"
+
+	if err := s.db.QueryRowContext(ctx, sqlCheckSQL, nameTable).Scan(&n); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("%w", err)
 	}
 
-	stmt, err := s.db.PrepareContext(ctx, setTypeSQL)
-	if err != nil {
-		return fmt.Errorf("prepare tableStmt: %w", err)
-	}
-	defer stmt.Close()
+	return true, nil
+}
 
-	arrType := []model.TypeMetric{model.TypeCountConst, model.TypeGaugeConst}
-	for i := range arrType {
-		args := []any{arrType[i], arrType[i].String()}
-		if _, err := stmt.ExecContext(ctx, args...); err != nil {
-			return fmt.Errorf("add type metric: %w", err)
+func (s *Postgres) addTypes(ctx context.Context) error {
+	sqlAddTypeSQL := "INSERT INTO mettype (type_id,mtype) VALUES ($1,$2)"
+	for mtype := model.TypeCountConst; mtype <= model.TypeGaugeConst; mtype++ {
+		if _, err := s.db.ExecContext(ctx, sqlAddTypeSQL, mtype, mtype.String()); err != nil {
+			return fmt.Errorf("%w", err)
 		}
 	}
 

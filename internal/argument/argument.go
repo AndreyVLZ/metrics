@@ -3,7 +3,6 @@ package argument
 import (
 	"flag"
 	"fmt"
-	_ "net/http/pprof"
 	"os"
 	"strconv"
 )

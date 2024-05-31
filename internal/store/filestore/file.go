@@ -4,36 +4,33 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	_ "net/http/pprof"
 	"os"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 )
 
 // Структура метрик для хранения в файле.
-type metric struct {
-	Name  string   `json:"mName"`
-	MType string   `json:"mType"`
-	Val   *float64 `json:"mVal,omitempty"`
-	Delta *int64   `json:"mDelta,omitempty"`
+type fileMetric struct {
+	NameID string     `json:"mName"`
+	TypeID model.Type `json:"mType"`
+	Val    *float64   `json:"mVal,omitempty"`
+	Delta  *int64     `json:"mDelta,omitempty"`
 }
 
-func buildMetric[VT model.ValueType](met model.MetricRepo[VT]) metric {
-	m := metric{
-		Name:  met.Name(),
-		MType: met.Type(),
-	}
+func (fm fileMetric) buildModelMetric() model.Metric {
+	return model.NewMetric(
+		model.Info{MName: fm.NameID, MType: fm.TypeID},
+		model.Value{Delta: fm.Delta, Val: fm.Val},
+	)
+}
 
-	switch met.Type() {
-	case model.TypeCountConst.String():
-		vv := int64(met.Value())
-		m.Delta = &vv
-	case model.TypeGaugeConst.String():
-		vv := float64(met.Value())
-		m.Val = &vv
+func buildFileMetric(met model.Metric) fileMetric {
+	return fileMetric{
+		NameID: met.MName,
+		TypeID: met.MType,
+		Val:    met.Val,
+		Delta:  met.Delta,
 	}
-
-	return m
 }
 
 type File struct {
@@ -117,13 +114,6 @@ func NewFile(filePath string) *File {
 }
 
 func (f *File) Open() error {
-	/*
-		file, err := os.OpenFile(f.filePath, os.O_RDWR|os.O_APPEND, 0777)
-		if err != nil {
-			return fmt.Errorf("%w", err)
-		}
-	*/
-
 	if err := f.consumer.Open(); err != nil {
 		return fmt.Errorf("%w", err)
 	}
@@ -131,10 +121,6 @@ func (f *File) Open() error {
 	if err := f.producer.Open(); err != nil {
 		return fmt.Errorf("%w", err)
 	}
-
-	// f.file = file
-	// f.writer = bufio.NewWriter(file)
-	// f.scanner = bufio.NewScanner(file)
 
 	return nil
 }
@@ -151,10 +137,8 @@ func (f *File) Close() error {
 	return nil
 }
 
-//func (f *File) Trunc() error { return f.file.Truncate(0) }
-
-func (f *File) WriteMetric(met metric) error {
-	data, err := json.Marshal(met)
+func (f *File) WriteMetric(met model.Metric) error {
+	data, err := json.Marshal(buildFileMetric(met))
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
@@ -166,71 +150,40 @@ func (f *File) WriteMetric(met metric) error {
 	return nil
 }
 
-func (f *File) ReadBatch() (model.Batch, error) {
-	clist := make([]model.MetricRepo[int64], 0)
-	glist := make([]model.MetricRepo[float64], 0)
-
-	for f.consumer.Scan() {
-		data := f.consumer.Bytes()
-
-		var metricFile metric
-
-		err := json.Unmarshal(data, &metricFile)
-		if err != nil {
-			return model.Batch{}, fmt.Errorf("%w", err)
-		}
-
-		switch metricFile.MType {
-		case model.TypeCountConst.String():
-			clist = append(clist, model.NewMetricRepo(metricFile.Name, model.TypeCountConst, *metricFile.Delta))
-		case model.TypeGaugeConst.String():
-			glist = append(glist, model.NewMetricRepo(metricFile.Name, model.TypeGaugeConst, *metricFile.Val))
-		}
-	}
-
-	if err := f.consumer.Err(); err != nil {
-		return model.Batch{}, fmt.Errorf("%w", err)
-	}
-
-	return model.Batch{
-		CList: clist,
-		GList: glist,
-	}, nil
-}
-
-func (f *File) WriteBatch(batch model.Batch) error {
+func (f *File) WriteBatch(arr []model.Metric) error {
 	if err := f.producer.Trunc(); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
-	for i := range batch.CList {
-		metL := batch.CList[i]
-		val := metL.Value()
-
-		met := metric{
-			Name:  metL.Name(),
-			MType: metL.Type(),
-			Delta: &val,
-		}
-
-		if err := f.WriteMetric(met); err != nil {
-			return fmt.Errorf("writeBatch: %w", err)
-		}
-	}
-
-	for i := range batch.GList {
-		metL := batch.GList[i]
-		val := metL.Value()
-		met := metric{
-			Name:  metL.Name(),
-			MType: metL.Type(),
-			Val:   &val,
-		}
-
-		if err := f.WriteMetric(met); err != nil {
-			return fmt.Errorf("writeBatch: %w", err)
+	for i := range arr {
+		if err := f.WriteMetric(arr[i]); err != nil {
+			return fmt.Errorf("%w", err)
 		}
 	}
 
 	return nil
+}
+
+func (f *File) ReadBatch() ([]model.Metric, error) {
+	var fileMet fileMetric
+
+	arr := make([]model.Metric, 0)
+
+	for f.consumer.Scan() {
+		fileMet = fileMetric{}
+		data := f.consumer.Bytes()
+
+		err := json.Unmarshal(data, &fileMet)
+		if err != nil {
+			return nil, fmt.Errorf("%w", err)
+		}
+
+		arr = append(arr, fileMet.buildModelMetric())
+	}
+
+	if err := f.consumer.Err(); err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	return arr, nil
 }

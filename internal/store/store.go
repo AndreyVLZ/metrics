@@ -2,12 +2,11 @@ package store
 
 import (
 	"context"
-	_ "net/http/pprof"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
-	m "github.com/AndreyVLZ/metrics/internal/model"
+	"github.com/AndreyVLZ/metrics/internal/store/adapter"
 	"github.com/AndreyVLZ/metrics/internal/store/filestore"
-	"github.com/AndreyVLZ/metrics/internal/store/memstore"
+	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
 	"github.com/AndreyVLZ/metrics/internal/store/postgres"
 )
 
@@ -16,12 +15,10 @@ type Storage interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 	Ping() error
-	UpdateCounter(ctx context.Context, met m.MetricRepo[int64]) (m.MetricRepo[int64], error)
-	UpdateGauge(ctx context.Context, met m.MetricRepo[float64]) (m.MetricRepo[float64], error)
-	GetCounter(ctx context.Context, name string) (m.MetricRepo[int64], error)
-	GetGauge(ctx context.Context, name string) (m.MetricRepo[float64], error)
-	List(ctx context.Context) (m.Batch, error)
-	AddBatch(ctx context.Context, batch model.Batch) error
+	Get(ctx context.Context, mInfo model.Info) (model.Metric, error)
+	Update(ctx context.Context, met model.Metric) (model.Metric, error)
+	List(ctx context.Context) ([]model.Metric, error)
+	AddBatch(ctx context.Context, arr []model.Metric) error
 }
 
 type StorageType string
@@ -54,13 +51,17 @@ func New(cfg Config) Storage {
 	case StorageTypePostgres:
 		return postgres.New(postgres.Config{ConnDB: cfg.ConnDB})
 	case StorageTypeInFile:
-		return filestore.New(
+		filestore := filestore.New(
 			filestore.Config{
 				StorePath: cfg.StorePath,
 				IsRestore: cfg.IsRestore,
 				StoreInt:  cfg.StoreInt,
-			}, memstore.New())
+			}, inmemory.New())
+
+		return adapter.Ping(filestore)
 	default:
-		return memstore.New()
+		inmem := inmemory.New()
+
+		return adapter.Ping(inmem)
 	}
 }

@@ -1,7 +1,5 @@
 package server
 
-import _ "net/http/pprof"
-
 const (
 	AddressDefault       string = "localhost:8080"
 	StoreIntervalDefault int    = 300
