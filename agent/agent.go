@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,10 +120,9 @@ func (a *Agent) send(ctx context.Context, data []byte) error {
 		sum, err := hash.SHA256(data, []byte(a.cfg.key))
 		if err != nil {
 			log.Printf("err %v\n", err)
+			return err
 		} else {
-			_ = sum
-
-			// req.Header.Set("HashSHA256", hex.EncodeToString(sum))
+			req.Header.Set("HashSHA256", hex.EncodeToString(sum))
 		}
 	}
 
