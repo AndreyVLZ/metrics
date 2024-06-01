@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"net/http/pprof"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 	"github.com/AndreyVLZ/metrics/server/http/handler"
@@ -89,12 +88,13 @@ func initChiRouter(srv service, log *slog.Logger) *chi.Mux {
 				handler.PostValueHandle(srv, log).ServeHTTP,
 			)
 		})
-
-		r.Get("/debug/pprof/", http.HandlerFunc(pprof.Index))
-		r.Get("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
-		r.Get("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
-		r.Get("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
-		r.Get("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+		/*
+			r.Get("/debug/pprof/", http.HandlerFunc(pprof.Index))
+			r.Get("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+			r.Get("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+			r.Get("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+			r.Get("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+		*/
 	})
 
 	return route

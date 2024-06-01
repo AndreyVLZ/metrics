@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"time"
 
 	arg "github.com/AndreyVLZ/metrics/internal/argument"
@@ -56,6 +58,10 @@ func main() {
 		server.SetDatabaseDNS(databaseDNS),
 		server.SetKey(key),
 	)
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	run(cfg)
 }

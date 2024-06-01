@@ -2,8 +2,9 @@ package hash
 
 import (
 	"encoding/hex"
-	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSHAok(t *testing.T) {
@@ -70,9 +71,16 @@ func TestSHAok(t *testing.T) {
 			t.Errorf("valid hash: %v\n", isValid)
 		}
 
-		fmt.Printf("data-1: %v\ndata-2: %v\n",
+		assert.NotEqual(t,
 			hex.EncodeToString(sData1),
 			hex.EncodeToString(sData2),
 		)
+
+		/*
+			fmt.Printf("data-1: %v\ndata-2: %v\n",
+				hex.EncodeToString(sData1),
+				hex.EncodeToString(sData2),
+			)
+		*/
 	})
 }

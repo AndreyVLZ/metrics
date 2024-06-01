@@ -62,17 +62,10 @@ func New(cfg *Config, store storage, log *slog.Logger) *Agent {
 		stats:     stats.New(),
 		store:     store,
 		urlToSend: fmt.Sprintf(urlFormat, cfg.addr),
-		//	client:    http.DefaultClient,
 		client: &http.Client{
 			Transport: &loggingRoundTripper{
-				log: log,
-				//next: &retryRoundTripper{
+				log:  log,
 				next: http.DefaultTransport,
-				//	maxRetries:     attemptConst,
-				//	delayIncrement: time.Second,
-				//	log:            log,
-				//	fnBuildReq:     buildReq,
-				//},
 			},
 		},
 		chErr: make(chan error),

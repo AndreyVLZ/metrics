@@ -36,3 +36,31 @@ func TestGzip(t *testing.T) {
 		fmt.Printf("res %v\n", res.StatusCode)
 	})
 }
+
+func BenchmarkGzip(b *testing.B) {
+	nextHandler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("TEST SFS"))
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/test",
+		strings.NewReader("bodagjjdjfjnjn"),
+	)
+
+	for i := 0; i < b.N; i++ {
+		handTest := Gzip(nextHandler)
+		ht := httptest.NewRecorder()
+		handTest.ServeHTTP(ht, req)
+
+		res := ht.Result()
+
+		if err := res.Body.Close(); err != nil {
+			b.Errorf("boby close err: %v\n", err)
+		}
+
+		if res.StatusCode != http.StatusOK {
+			b.Errorf("status: %d\n", res.StatusCode)
+		}
+	}
+}

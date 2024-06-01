@@ -113,20 +113,6 @@ type InfoStr struct {
 	MType string
 }
 
-/*
-func (info InfoStr) Valid() error {
-	if info.MType == "" {
-		return errors.New("info.MType empty")
-	}
-
-	if info.Name == "" {
-		return errors.New("info.Name empty")
-	}
-
-	return nil
-}
-*/
-
 // Представление метрики в виде строк.
 type MetricStr struct {
 	InfoStr
