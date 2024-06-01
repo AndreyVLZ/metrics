@@ -2,7 +2,6 @@
 package argument
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,27 +11,28 @@ type Arg func() error
 
 func Array(args ...Arg) []Arg { return args }
 
-// Возвращает функцию для парсинга Int флага и env.
-func Int(valInt *int, nameFlag string, nameENV string, usage string) Arg {
+// Возвращает функцию для парсинга Int env.
+func Int(valInt *int, nameENV string) Arg {
 	return func() error {
-		flag.IntVar(valInt, nameFlag, *valInt, usage)
-
-		valIntParse, err := intEnv(nameENV)
+		valStr, err := stringEnv(nameENV)
 		if err != nil {
 			return err
 		}
 
-		*valInt = valIntParse
+		val, err := strconv.Atoi(valStr)
+		if err != nil {
+			return IncorrectError{nameENV: nameENV}
+		}
+
+		*valInt = val
 
 		return nil
 	}
 }
 
-// Парсинг String флага.
-func String(valStr *string, nameFlag string, nameENV string, usage string) Arg {
+// Парсинг String env.
+func String(valStr *string, nameENV string) Arg {
 	return func() error {
-		flag.StringVar(valStr, nameFlag, *valStr, usage)
-
 		valStrParse, err := stringEnv(nameENV)
 		if err != nil {
 			return err
@@ -44,10 +44,8 @@ func String(valStr *string, nameFlag string, nameENV string, usage string) Arg {
 	}
 }
 
-func Bool(valBool *bool, nameFlag string, nameENV string, usage string) Arg {
+func Bool(valBool *bool, nameENV string) Arg {
 	return func() error {
-		flag.BoolVar(valBool, nameFlag, *valBool, usage)
-
 		valBoolParse, err := boolEnv(nameENV)
 		if err != nil {
 			return err
@@ -101,6 +99,7 @@ func stringEnv(nameENV string) (string, error) {
 	return valStr, nil
 }
 
+/*
 func intEnv(nameENV string) (int, error) {
 	valStr, err := stringEnv(nameENV)
 	if err != nil {
@@ -114,6 +113,7 @@ func intEnv(nameENV string) (int, error) {
 
 	return val, nil
 }
+*/
 
 func boolEnv(nameENV string) (bool, error) {
 	valBool, ok := os.LookupEnv(nameENV)

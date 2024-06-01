@@ -62,21 +62,19 @@ func New(cfg *Config, store storage, log *slog.Logger) *Agent {
 		stats:     stats.New(),
 		store:     store,
 		urlToSend: fmt.Sprintf(urlFormat, cfg.addr),
-		client:    http.DefaultClient,
-		/*
-			client: &http.Client{
-				Transport: &loggingRoundTripper{
-					log: log,
-					//next: &retryRoundTripper{
-					next: http.DefaultTransport,
-					//	maxRetries:     attemptConst,
-					//	delayIncrement: time.Second,
-					//	log:            log,
-					//	fnBuildReq:     buildReq,
-					//},
-				},
+		//	client:    http.DefaultClient,
+		client: &http.Client{
+			Transport: &loggingRoundTripper{
+				log: log,
+				//next: &retryRoundTripper{
+				next: http.DefaultTransport,
+				//	maxRetries:     attemptConst,
+				//	delayIncrement: time.Second,
+				//	log:            log,
+				//	fnBuildReq:     buildReq,
+				//},
 			},
-		*/
+		},
 		chErr: make(chan error),
 	}
 }
@@ -115,7 +113,6 @@ func (a *Agent) send(ctx context.Context, data []byte) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	fmt.Printf("AGENT-KEY [%s]\n", a.cfg.key)
 	if len(data) != 0 {
 		sum, err := hash.SHA256(data, []byte(a.cfg.key))
 		if err != nil {
@@ -288,20 +285,6 @@ func buildReq(ctx context.Context, url string, data io.Reader) (*http.Request, e
 	return req, nil
 }
 
-/*
-func buildRequest(ctx context.Context, url string, data []byte) (*http.Request, error) {
-	fmt.Printf("LEN [%d]\n", len(data))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("%w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	return req, nil
-}
-*/
-
 // fanIn объединяет несколько каналов в один.
 func fanIn(errChs ...<-chan error) <-chan error {
 	var wg sync.WaitGroup
@@ -323,7 +306,6 @@ func fanIn(errChs ...<-chan error) <-chan error {
 	go func() {
 		wg.Wait()
 		close(finalCh)
-		// fmt.Println("wait fanIN OK")
 	}()
 
 	return finalCh
@@ -339,9 +321,6 @@ func runWorkerPool(rateLimit int, jobc <-chan []model.Metric, fnSend func([]mode
 		wgPool.Add(1)
 
 		go func(id int) {
-			// fmt.Printf("start worker [%v]\n", id)
-			//	defer fmt.Printf("stopt worker [%v]\n", id)
-
 			for list := range jobc {
 				if err := fnSend(list); err != nil {
 					errc <- err
@@ -355,7 +334,6 @@ func runWorkerPool(rateLimit int, jobc <-chan []model.Metric, fnSend func([]mode
 	go func() {
 		wgPool.Wait()
 		close(errc)
-		// fmt.Println("waitPool OK")
 	}()
 
 	return errc

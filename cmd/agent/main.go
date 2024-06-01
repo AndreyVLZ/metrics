@@ -19,41 +19,24 @@ func main() {
 		rateLimit      = agent.RateLimitDefault
 		pollInterval   = agent.PollIntervalDefault
 		reportInterval = agent.ReportIntervalDefault
-		key            = agent.KeyDafault
+		key            = ""
 	)
 
 	args := arg.Array(
-		arg.String(
-			&addr,     // val
-			"a",       // name Flag
-			"ADDRESS", // name ENV
-			"адрес эндпоинта HTTP-сервера", // desc
-		),
-		arg.Int(
-			&pollInterval,
-			"p",
-			"POLL_INTERVAL",
-			"частота опроса метрик из пакета runtime",
-		),
-		arg.Int(
-			&reportInterval,
-			"r",
-			"REPORT_INTERVAL",
-			"частота отправки метрик на сервер",
-		),
-		arg.String(
-			&key,
-			"k",
-			"KEY",
-			"ключ",
-		),
-		arg.Int(
-			&rateLimit,
-			"l",
-			"RATE_LIMIT",
-			"количество одновременно исходящих запросов на сервер",
-		),
+		arg.String(&addr, "ADDRESS"),
+		arg.Int(&pollInterval, "POLL_INTERVAL"),
+		arg.Int(&reportInterval, "REPORT_INTERVAL"),
+		arg.String(&key, "KEY"),
+		arg.Int(&rateLimit, "RATE_LIMIT"),
 	)
+
+	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
+	flag.IntVar(&pollInterval, "p", pollInterval, "частота опроса метрик из пакета runtime")
+	flag.IntVar(&reportInterval, "r", reportInterval, "частота отправки метрик на сервер")
+	flag.StringVar(&key, "k", key, "ключ")
+	flag.IntVar(&rateLimit, "l", rateLimit, "количество одновременно исходящих запросов на сервер")
+
+	flag.Parse()
 
 	for i := range args {
 		err := args[i]()
@@ -61,8 +44,6 @@ func main() {
 			log.Printf("err parse args: %v\n", err)
 		}
 	}
-
-	flag.Parse()
 
 	cfg := agent.NewConfig(
 		agent.SetAddr(addr),

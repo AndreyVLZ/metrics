@@ -13,21 +13,15 @@ func TestInt(t *testing.T) {
 	args := Array(
 		Int(
 			&tInt,
-			"a",
 			"A",
-			"desc",
 		),
 		String(
 			&tString,
-			"b",
 			"B",
-			"desc",
 		),
 		Bool(
 			&tBool,
-			"c",
 			"C",
-			"desc",
 		),
 	)
 	flag.Parse()

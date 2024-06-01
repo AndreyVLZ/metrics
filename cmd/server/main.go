@@ -22,44 +22,24 @@ func main() {
 		isRestore     = server.IsRestoreDefault
 		key           = ""
 	)
+
 	args := arg.Array(
-		arg.String(
-			&addr,     // val
-			"a",       // name Flag
-			"ADDRESS", // name ENV
-			"адрес эндпоинта HTTP-сервера", // desc
-		),
-		arg.Int(
-			&storeInterval,
-			"i",
-			"STORE_INTERVAL",
-			"интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск",
-		),
-		arg.String(
-			&storagePath,
-			"f",
-			"FILE_STORAGE_PATH",
-			"полное имя файла, куда сохраняются текущие значения",
-		),
-		arg.Bool(
-			&isRestore,
-			"r",
-			"RESTORE",
-			"определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера",
-		),
-		arg.String(
-			&databaseDNS,
-			"d",
-			"DATABASE_DSN",
-			"строка с адресом подключения к БД",
-		),
-		arg.String(
-			&key,
-			"k",
-			"KEY",
-			"ключ",
-		),
+		arg.String(&addr, "ADDRESS"),
+		arg.Int(&storeInterval, "STORE_INTERVAL"),
+		arg.String(&storagePath, "FILE_STORAGE_PATH"),
+		arg.Bool(&isRestore, "RESTORE"),
+		arg.String(&databaseDNS, "DATABASE_DSN"),
+		arg.String(&key, "KEY"),
 	)
+
+	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
+	flag.IntVar(&storeInterval, "i", storeInterval, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск")
+	flag.StringVar(&storagePath, "f", storagePath, "полное имя файла, куда сохраняются текущие значения")
+	flag.BoolVar(&isRestore, "r", isRestore, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера")
+	flag.StringVar(&databaseDNS, "d", databaseDNS, "строка с адресом подключения к БД")
+	flag.StringVar(&key, "k", key, "ключ")
+
+	flag.Parse()
 
 	for i := range args {
 		err := args[i]()
@@ -67,8 +47,6 @@ func main() {
 			log.Printf("err parse args: %v\n", err)
 		}
 	}
-
-	flag.Parse()
 
 	cfg := server.NewConfig(
 		server.SetAddr(addr),

@@ -45,7 +45,6 @@ type myReaderCloser struct {
 // Хеширование данных.
 func Hash(key string, next http.Handler) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
-		fmt.Printf("SERVER-KEY [%s]\n", key)
 		// Выходим если key не задан
 		if key == "" {
 			// передаём управление хендлеру
