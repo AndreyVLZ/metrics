@@ -75,12 +75,5 @@ func TestSHAok(t *testing.T) {
 			hex.EncodeToString(sData1),
 			hex.EncodeToString(sData2),
 		)
-
-		/*
-			fmt.Printf("data-1: %v\ndata-2: %v\n",
-				hex.EncodeToString(sData1),
-				hex.EncodeToString(sData2),
-			)
-		*/
 	})
 }

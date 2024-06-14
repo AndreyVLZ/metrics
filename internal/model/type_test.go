@@ -27,7 +27,7 @@ func TestParseType(t *testing.T) {
 
 	t.Run("parse type err", func(t *testing.T) {
 		_, err := ParseType("cg")
-		errors.Is(err, errTypeNotSupport)
+		errors.Is(err, ErrTypeNotSupport)
 		if err == nil {
 			t.Error("want err")
 		}

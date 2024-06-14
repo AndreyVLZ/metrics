@@ -15,12 +15,12 @@ func TestMetricUpdate(t *testing.T) {
 		)
 
 		met := NewCounterMetric("Counter-1", initVal)
-		val := NewCounterValue(updVal)
+		val := Value{Delta: &updVal}
 
 		err := met.Update(val)
 
 		if assert.NoError(t, err) {
-			assert.Equal(t, valWant, met.GetDelta())
+			assert.Equal(t, valWant, *met.Delta)
 		}
 	})
 
@@ -32,12 +32,12 @@ func TestMetricUpdate(t *testing.T) {
 		)
 
 		met := NewGaugeMetric("Gauge-1", initVal)
-		val := NewGaugeValue(updVal)
+		val := Value{Val: &updVal}
 
 		err := met.Update(val)
 
 		if assert.NoError(t, err) {
-			assert.Equal(t, valWant, met.GetValue())
+			assert.Equal(t, valWant, *met.Val)
 		}
 	})
 
@@ -57,6 +57,18 @@ func TestMetricUpdate(t *testing.T) {
 		var initVal = 10.01
 
 		met := NewGaugeMetric("Gauge-1", initVal)
+		val := Value{}
+
+		err := met.Update(val)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+
+	t.Run("update err type not support", func(t *testing.T) {
+		var initVal = 10.01
+
+		met := NewMetric(Info{MName: "Type not support", MType: Type(2)}, Value{Val: &initVal})
 		val := Value{}
 
 		err := met.Update(val)
@@ -141,148 +153,10 @@ func TestBuildArrMetricJSON(t *testing.T) {
 	assert.Equal(t, wantArr, arrMetJSON)
 }
 
-func TestParseMetricJSON(t *testing.T) {
-	t.Run("parse counter ok", func(t *testing.T) {
-		var delta int64 = 10
-
-		wantJSON := MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
-		metStr := MetricStr{
-			InfoStr: InfoStr{Name: "Counter-1", MType: "counter"},
-			Val:     "10",
-		}
-
-		metJSON, err := ParseMetricJSON(metStr)
-		assert.NoError(t, err)
-
-		assert.Equal(t, wantJSON, metJSON)
-	})
-
-	t.Run("parse gauge ok", func(t *testing.T) {
-		var val = 10.01
-
-		wantJSON := MetricJSON{ID: "Gauge-1", MType: "gauge", Value: &val}
-		metStr := MetricStr{
-			InfoStr: InfoStr{Name: "Gauge-1", MType: "gauge"},
-			Val:     "10.01",
-		}
-
-		metJSON, err := ParseMetricJSON(metStr)
-		assert.NoError(t, err)
-
-		assert.Equal(t, wantJSON, metJSON)
-	})
-
-	t.Run("parse err type not support", func(t *testing.T) {
-		metStr := MetricStr{
-			InfoStr: InfoStr{Name: "Counter-1", MType: "c"},
-			Val:     "10",
-		}
-
-		_, err := ParseMetricJSON(metStr)
-		if err == nil {
-			t.Error("want err")
-		}
-	})
-
-	t.Run("parse err not correct delta", func(t *testing.T) {
-		metStr := MetricStr{
-			InfoStr: InfoStr{Name: "Counter-1", MType: "counter"},
-			Val:     "c",
-		}
-
-		_, err := ParseMetricJSON(metStr)
-		if err == nil {
-			t.Error("want err")
-		}
-	})
-
-	t.Run("parse err not correct value", func(t *testing.T) {
-		metStr := MetricStr{
-			InfoStr: InfoStr{Name: "Gauge-1", MType: "gauge"},
-			Val:     "c",
-		}
-
-		_, err := ParseMetricJSON(metStr)
-		if err == nil {
-			t.Error("want err")
-		}
-	})
-}
-
-func TestParseMetric(t *testing.T) {
-	t.Run("parse counter ok", func(t *testing.T) {
-		var delta int64 = 10
-		metJSON := MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
-
-		wanMet := NewCounterMetric("Counter-1", delta)
-
-		met, err := ParseMetric(metJSON)
-
-		assert.NoError(t, err)
-		assert.Equal(t, wanMet, met)
-	})
-
-	t.Run("parse gauge ok", func(t *testing.T) {
-		var val = 10.01
-		metJSON := MetricJSON{ID: "Gauge-1", MType: "gauge", Value: &val}
-
-		wanMet := NewGaugeMetric("Gauge-1", val)
-
-		met, err := ParseMetric(metJSON)
-
-		assert.NoError(t, err)
-		assert.Equal(t, wanMet, met)
-	})
-
-	t.Run("parse err parseInfo ok", func(t *testing.T) {
-		var delta int64 = 10
-		metJSON := MetricJSON{ID: "", MType: "counter", Delta: &delta}
-		_, err := ParseMetric(metJSON)
-		if err == nil {
-			t.Error("want err")
-		}
-	})
-}
-
-func TestBuildArrMetric(t *testing.T) {
-	t.Run("build arr ok", func(t *testing.T) {
-		var delta int64 = 10
-		var val = 10.01
-
-		arrMetJSON := []MetricJSON{
-			{ID: "Counter-1", MType: "counter", Delta: &delta},
-			{ID: "Gauge-1", MType: "gauge", Value: &val},
-		}
-
-		wantArr := []Metric{
-			NewCounterMetric("Counter-1", 10),
-			NewGaugeMetric("Gauge-1", 10.01),
-		}
-
-		arr, err := BuildArrMetric(arrMetJSON)
-		assert.NoError(t, err)
-		assert.Equal(t, wantArr, arr)
-	})
-
-	t.Run("build arr err parse", func(t *testing.T) {
-		var delta int64 = 10
-		var val = 10.01
-
-		arrMetJSON := []MetricJSON{
-			{ID: "Counter-1", MType: "counter", Delta: &delta},
-			{ID: "", MType: "gauge", Value: &val},
-		}
-
-		_, err := BuildArrMetric(arrMetJSON)
-		if err == nil {
-			t.Error("want err")
-		}
-	})
-}
-
 func BenchmarkMetricUpdateCounter(b *testing.B) {
 	met := NewCounterMetric("Counter-1", 100)
-	val := NewCounterValue(11)
+	var delta int64 = 11
+	val := Value{Delta: &delta}
 
 	for i := 0; i < b.N; i++ {
 		met.Update(val)
@@ -291,7 +165,8 @@ func BenchmarkMetricUpdateCounter(b *testing.B) {
 
 func BenchmarkMetricUpdateGauge(b *testing.B) {
 	met := NewGaugeMetric("Counter-1", 10.01)
-	val := NewGaugeValue(20.02)
+	value := 10.01
+	val := Value{Val: &value}
 
 	for i := 0; i < b.N; i++ {
 		met.Update(val)

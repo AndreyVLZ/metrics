@@ -63,11 +63,11 @@ func (fsrv fakeSrv) Ping() error {
 
 func TestPostJSONUpdateHandle(t *testing.T) {
 	type testCase struct {
-		name   string
 		body   io.Reader
-		status int
-		header string
 		srv    srvUpdater
+		name   string
+		header string
+		status int
 	}
 
 	tc := []testCase{
@@ -142,11 +142,11 @@ func TestPostJSONUpdateHandle(t *testing.T) {
 
 func TestPostUpdateHandle(t *testing.T) {
 	type testCase struct {
-		name    string
-		fnParse func(req *http.Request) model.MetricStr
-		status  int
-		header  string
 		srv     srvUpdater
+		fnParse func(req *http.Request) model.MetricStr
+		name    string
+		header  string
+		status  int
 	}
 
 	tc := []testCase{
@@ -246,12 +246,12 @@ func TestPostUpdateHandle(t *testing.T) {
 
 func TestGetValueHandle(t *testing.T) {
 	type testCase struct {
+		fnParse func(req *http.Request) model.InfoStr
+		fnSrv   func() srvGetter
 		name    string
 		url     string
-		fnParse func(req *http.Request) model.InfoStr
-		status  int
 		header  string
-		fnSrv   func() srvGetter
+		status  int
 	}
 
 	tc := []testCase{
@@ -375,11 +375,11 @@ func TestGetValueHandle(t *testing.T) {
 
 func TestPostValueHandle(t *testing.T) {
 	type testCase struct {
-		name   string
 		body   io.Reader
-		status int
-		header string
 		fnSrv  func() srvGetter
+		name   string
+		header string
+		status int
 	}
 
 	tc := []testCase{
@@ -500,10 +500,10 @@ func TestPostValueHandle(t *testing.T) {
 
 func TestPostUpdatesHandler(t *testing.T) {
 	type testCase struct {
-		name   string
 		body   io.Reader
-		status int
 		srv    srvBatch
+		name   string
+		status int
 	}
 
 	tc := []testCase{
@@ -565,12 +565,12 @@ func TestListHandle(t *testing.T) {
 	tplsErr := `{{define "NameTmplErr"}}{{end}}`
 
 	type testCase struct {
-		name   string
 		body   io.Reader
-		status int
-		header string
 		tmpl   *template.Template
 		fnSrv  func() srvBatch
+		name   string
+		header string
+		status int
 	}
 
 	tc := []testCase{
@@ -652,9 +652,9 @@ func TestListHandle(t *testing.T) {
 
 func TestPingHandler(t *testing.T) {
 	type testCase struct {
+		fnSrv  func() srvPing
 		name   string
 		status int
-		fnSrv  func() srvPing
 	}
 
 	tc := []testCase{
@@ -700,4 +700,72 @@ func TestPingHandler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseMetricJSON(t *testing.T) {
+	t.Run("parse counter ok", func(t *testing.T) {
+		var delta int64 = 10
+
+		wantJSON := model.MetricJSON{ID: "Counter-1", MType: "counter", Delta: &delta}
+		metStr := model.MetricStr{
+			InfoStr: model.InfoStr{Name: "Counter-1", MType: "counter"},
+			Val:     "10",
+		}
+
+		metJSON, err := parseMetricJSON(metStr)
+		assert.NoError(t, err)
+
+		assert.Equal(t, wantJSON, metJSON)
+	})
+
+	t.Run("parse gauge ok", func(t *testing.T) {
+		var val = 10.01
+
+		wantJSON := model.MetricJSON{ID: "Gauge-1", MType: "gauge", Value: &val}
+		metStr := model.MetricStr{
+			InfoStr: model.InfoStr{Name: "Gauge-1", MType: "gauge"},
+			Val:     "10.01",
+		}
+
+		metJSON, err := parseMetricJSON(metStr)
+		assert.NoError(t, err)
+
+		assert.Equal(t, wantJSON, metJSON)
+	})
+
+	t.Run("parse err type not support", func(t *testing.T) {
+		metStr := model.MetricStr{
+			InfoStr: model.InfoStr{Name: "Counter-1", MType: "c"},
+			Val:     "10",
+		}
+
+		_, err := parseMetricJSON(metStr)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+
+	t.Run("parse err not correct delta", func(t *testing.T) {
+		metStr := model.MetricStr{
+			InfoStr: model.InfoStr{Name: "Counter-1", MType: "counter"},
+			Val:     "c",
+		}
+
+		_, err := parseMetricJSON(metStr)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
+
+	t.Run("parse err not correct value", func(t *testing.T) {
+		metStr := model.MetricStr{
+			InfoStr: model.InfoStr{Name: "Gauge-1", MType: "gauge"},
+			Val:     "c",
+		}
+
+		_, err := parseMetricJSON(metStr)
+		if err == nil {
+			t.Error("want err")
+		}
+	})
 }

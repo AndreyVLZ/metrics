@@ -89,7 +89,7 @@ func TestMemStore(t *testing.T) {
 
 	t.Run("get_errNotFind", func(t *testing.T) {
 		mem := New()
-		info := model.NewGaugeInfo("NON")
+		info := model.Info{MName: "MOM", MType: model.TypeCountConst}
 
 		_, err := mem.Get(ctx, info)
 		assert.Equal(t, errNotFind, err)

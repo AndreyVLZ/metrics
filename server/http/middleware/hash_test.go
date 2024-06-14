@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AndreyVLZ/metrics/internal/hash"
+	"github.com/AndreyVLZ/metrics/pkg/hash"
 	"github.com/stretchr/testify/assert"
 )
 

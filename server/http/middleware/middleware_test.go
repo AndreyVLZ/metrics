@@ -9,9 +9,9 @@ import (
 )
 
 type testCase struct {
+	fnSetHeader func(req *http.Request)
 	name        string
 	statusCode  int
-	fnSetHeader func(req *http.Request)
 }
 
 func fnCheck(t *testing.T, tName string, val string, fn func(http.Handler) http.Handler) {

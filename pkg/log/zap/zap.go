@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func DefaultConfig() zap.Config {
+func defaultConfig(lvl zapcore.Level) zap.Config {
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "timestamp"
 	//encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -18,7 +18,7 @@ func DefaultConfig() zap.Config {
 	})
 
 	config := zap.Config{
-		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
+		Level:             zap.NewAtomicLevelAt(lvl),
 		Development:       false,
 		DisableCaller:     false,
 		DisableStacktrace: false,
@@ -36,8 +36,9 @@ func DefaultConfig() zap.Config {
 	return config
 }
 
-func New(conf zap.Config) *slog.Logger {
-	zapL := newZap(conf)
+func New(lvl zapcore.Level) *slog.Logger {
+	cfg := defaultConfig(lvl)
+	zapL := newZap(cfg)
 	logger := slog.New(zapslog.NewHandler(zapL.Core(), nil))
 
 	return logger

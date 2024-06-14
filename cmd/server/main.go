@@ -4,18 +4,29 @@ import (
 	"context"
 	"flag"
 	"log"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
 	"time"
 
-	arg "github.com/AndreyVLZ/metrics/internal/argument"
-	"github.com/AndreyVLZ/metrics/internal/log/zap"
-	"github.com/AndreyVLZ/metrics/internal/shutdown"
+	"github.com/AndreyVLZ/metrics/pkg/env"
+	mylog "github.com/AndreyVLZ/metrics/pkg/log"
+	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 	"github.com/AndreyVLZ/metrics/server"
 	"github.com/AndreyVLZ/metrics/server/adapter"
 )
 
+const timeout time.Duration = 7
+
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
+	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
+
 	var (
 		addr          = server.AddressDefault
 		storeInterval = server.StoreIntervalDefault
@@ -23,15 +34,7 @@ func main() {
 		databaseDNS   = ""
 		isRestore     = server.IsRestoreDefault
 		key           = ""
-	)
-
-	args := arg.Array(
-		arg.String(&addr, "ADDRESS"),
-		arg.Int(&storeInterval, "STORE_INTERVAL"),
-		arg.String(&storagePath, "FILE_STORAGE_PATH"),
-		arg.Bool(&isRestore, "RESTORE"),
-		arg.String(&databaseDNS, "DATABASE_DSN"),
-		arg.String(&key, "KEY"),
+		logLevel      = mylog.LevelInfo
 	)
 
 	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
@@ -40,43 +43,53 @@ func main() {
 	flag.BoolVar(&isRestore, "r", isRestore, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера")
 	flag.StringVar(&databaseDNS, "d", databaseDNS, "строка с адресом подключения к БД")
 	flag.StringVar(&key, "k", key, "ключ")
+	flag.StringVar(&logLevel, "lvl", logLevel, "уровень логирования")
 
 	flag.Parse()
 
-	for i := range args {
-		err := args[i]()
+	ctx := context.Background()
+	logger := mylog.New(mylog.SlogKey, logLevel)
+
+	vars := env.Array(
+		env.String(&addr, "ADDRESS"),
+		env.Int(&storeInterval, "STORE_INTERVAL"),
+		env.String(&storagePath, "FILE_STORAGE_PATH"),
+		env.Bool(&isRestore, "RESTORE"),
+		env.String(&databaseDNS, "DATABASE_DSN"),
+		env.String(&key, "KEY"),
+	)
+
+	for i := range vars {
+		err := vars[i]()
 		if err != nil {
-			log.Printf("err parse args: %v\n", err)
+			logger.DebugContext(ctx, err.Error())
 		}
 	}
 
-	cfg := server.NewConfig(
+	opts := []server.FuncOpt{
 		server.SetAddr(addr),
 		server.SetStoreInt(storeInterval),
 		server.SetStorePath(storagePath),
 		server.SetRestore(isRestore),
 		server.SetDatabaseDNS(databaseDNS),
 		server.SetKey(key),
-	)
+	}
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	run(cfg)
+	if err := runServer(ctx, timeout, logger, opts...); err != nil {
+		logger.ErrorContext(ctx, "start server", "error", err)
+	}
 }
 
-func run(cfg *server.Config) {
-	var timeout time.Duration = 7
-
-	logger := zap.New(zap.DefaultConfig())
-	server := server.New(cfg, logger)
+func runServer(ctx context.Context, timeout time.Duration, log *slog.Logger, opts ...server.FuncOpt) error {
+	server := server.New(log, opts...)
 	shutdown := shutdown.New(
 		adapter.NewShutdown(&server),
 		timeout,
 	)
 
-	if err := shutdown.Start(context.Background()); err != nil {
-		log.Printf("server error: %v\n", err)
-	}
+	return shutdown.Start(ctx)
 }

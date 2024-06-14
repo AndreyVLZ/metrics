@@ -37,14 +37,10 @@ func (ss *spyStore) List(_ context.Context) ([]model.Metric, error) {
 }
 
 type spyFile struct {
-	mu  sync.Mutex
-	arr []model.Metric
-	met model.Metric
 	err error
-}
-
-func newSpyFile() *spyFile {
-	return &spyFile{}
+	met model.Metric
+	arr []model.Metric
+	mu  sync.Mutex
 }
 
 func (sf *spyFile) WriteMetric(met model.Metric) error {

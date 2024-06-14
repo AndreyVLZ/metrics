@@ -7,27 +7,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent/stats"
-	"github.com/AndreyVLZ/metrics/internal/hash"
 	"github.com/AndreyVLZ/metrics/internal/model"
+	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
+	"github.com/AndreyVLZ/metrics/pkg/hash"
 )
 
 const (
-	urlFormat = "http://%s/updates/" // Эндпоинт для отправки метрик.
-	countTask = 3                    // Кол-во задач для Агента.
-)
-
-const (
-	attemptConst          = 3 // Кол-во повторов отправки при ошибки.
-	durationTaskConst     = 2 // Таймаут опроса метрик из пакета goutils.
-	retryTimeoutStepConst = 2 // Шаг увелечения таймаута для повторной отправки.
+	urlFormat             = "http://%s/updates/" // Эндпоинт для отправки метрик.
+	countTask             = 3                    // Кол-во задач для Агента.
+	attemptConst          = 3                    // Кол-во повторов отправки при ошибки.
+	durationTaskConst     = 2                    // Таймаут опроса метрик из пакета goutils.
+	retryTimeoutStepConst = 2                    // Шаг увелечения таймаута для повторной отправки.
 )
 
 // Интерфейс статистики.
@@ -47,16 +43,20 @@ type storage interface {
 
 // Агент.
 type Agent struct {
-	cfg       *Config
 	stats     iStats
 	store     storage
-	urlToSend string
+	cfg       *config
 	client    *http.Client
+	log       *slog.Logger
 	chErr     chan error
+	urlToSend string
 }
 
 // Новый Агент.
-func New(cfg *Config, store storage, log *slog.Logger) *Agent {
+func New(log *slog.Logger, fnOpts ...FuncOpt) *Agent {
+	cfg := newConfig(fnOpts...)
+	store := inmemory.New()
+
 	return &Agent{
 		cfg:       cfg,
 		stats:     stats.New(),
@@ -68,18 +68,24 @@ func New(cfg *Config, store storage, log *slog.Logger) *Agent {
 				next: http.DefaultTransport,
 			},
 		},
+		log:   log,
 		chErr: make(chan error),
 	}
 }
 
 // Повторный вызов функции fnSend attempts раз.
 // Возвращает ошибку с кол-вом вызовов функции и самой ошибкой fnSend.
-func retry(ctx context.Context, attempts int, sleep time.Duration, fnSend func() error) error {
+func retry(ctx context.Context, attempts int, sleep time.Duration, log *slog.Logger, fnSend func() error) error {
 	var err error
 
 	for i := 0; i <= attempts; i++ {
 		if i > 0 {
-			log.Printf("Повтор [%d] после ошибки: %v\n", i, err)
+			log.DebugContext(ctx, "send",
+				slog.Group("send",
+					slog.Int("retry", i),
+					slog.String("error", err.Error()),
+				),
+			)
 
 			select {
 			case <-ctx.Done():
@@ -99,21 +105,21 @@ func retry(ctx context.Context, attempts int, sleep time.Duration, fnSend func()
 }
 
 // Отправка данных.
-func (a *Agent) send(ctx context.Context, data []byte) error {
+func (a *Agent) sendData(ctx context.Context, data []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.urlToSend, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("err build request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
 	if len(data) != 0 {
-		sum, err := hash.SHA256(data, []byte(a.cfg.key))
-		if err != nil {
-			log.Printf("err %v\n", err)
-			return err
-		} else {
-			req.Header.Set("HashSHA256", hex.EncodeToString(sum))
+		sum, errHash := hash.SHA256(data, []byte(a.cfg.key))
+		if errHash != nil {
+			return fmt.Errorf("hash: %w", errHash)
 		}
+
+		req.Header.Set("HashSHA256", hex.EncodeToString(sum))
 	}
 
 	resp, err := a.client.Do(req)
@@ -129,14 +135,14 @@ func (a *Agent) send(ctx context.Context, data []byte) error {
 }
 
 // Отправка метрик.
-func (a *Agent) Send(ctx context.Context, arr []model.Metric) error {
+func (a *Agent) send(ctx context.Context, arr []model.Metric) error {
 	data, err := json.Marshal(model.BuildArrMetricJSON(arr))
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
-	return retry(ctx, attemptConst, time.Second, func() error {
-		return a.send(ctx, data)
+	return retry(ctx, attemptConst, time.Second, a.log, func() error {
+		return a.sendData(ctx, data)
 	})
 }
 
@@ -162,9 +168,14 @@ func (a *Agent) Stop(ctx context.Context) error {
 // при инициализации статистики,
 // при иниицализации хранилища.
 func (a *Agent) Start(ctx context.Context) error {
-	log.Printf(
-		"start agent: addr[%s] poolInt[%d] reportInt[%d] key[%s] rateLimit[%d]\n",
-		a.cfg.addr, a.cfg.pollInterval, a.cfg.reportInterval, a.cfg.key, a.cfg.rateLimit,
+	a.log.DebugContext(ctx, "start agent",
+		slog.String("addr", a.cfg.addr),
+		slog.Group("flags",
+			slog.Int("poolInt", a.cfg.pollInterval),
+			slog.Int("reportInt", a.cfg.reportInterval),
+			slog.Int("rateLimit", a.cfg.rateLimit),
+			slog.String("key", a.cfg.key),
+		),
 	)
 
 	if err := a.stats.Init(); err != nil {
@@ -185,7 +196,7 @@ func (a *Agent) start(ctx context.Context) {
 	ctxCan, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	fnSend := func(arr []model.Metric) error { return a.Send(ctxCan, arr) }
+	fnSend := func(arr []model.Metric) error { return a.send(ctxCan, arr) }
 	chList, chErrTask := a.runTaskPool(ctxCan)
 	chErrWorker := runWorkerPool(a.cfg.rateLimit, chList, fnSend)
 
@@ -201,9 +212,9 @@ func (a *Agent) start(ctx context.Context) {
 
 // Задача для Агента.
 type task struct {
+	fn       func() error
 	name     string
 	duration time.Duration
-	fn       func() error
 }
 
 // Запуск пула задач для агента.
@@ -244,12 +255,13 @@ func (a *Agent) runTaskPool(ctx context.Context) (<-chan []model.Metric, <-chan 
 		wgTask.Add(1)
 
 		go func(task task) {
+			a.log.Debug("запуск задачи", "name", task.name)
 			defer wgTask.Done()
 
 			for {
 				select {
 				case <-ctx.Done():
-					chErr <- fmt.Errorf("задача [%v] отменена", task.name)
+					a.log.Debug("отмена задачи", "name", task.name)
 					return
 				case <-time.After(task.duration):
 					if err := task.fn(); err != nil {
@@ -267,15 +279,6 @@ func (a *Agent) runTaskPool(ctx context.Context) (<-chan []model.Metric, <-chan 
 	}()
 
 	return chList, chErr
-}
-
-func buildReq(ctx context.Context, url string, data io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, data)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
 }
 
 // fanIn объединяет несколько каналов в один.
@@ -313,7 +316,7 @@ func runWorkerPool(rateLimit int, jobc <-chan []model.Metric, fnSend func([]mode
 	for idWorker := 0; idWorker < rateLimit; idWorker++ {
 		wgPool.Add(1)
 
-		go func(id int) {
+		go func() {
 			for list := range jobc {
 				if err := fnSend(list); err != nil {
 					errc <- err
@@ -321,7 +324,7 @@ func runWorkerPool(rateLimit int, jobc <-chan []model.Metric, fnSend func([]mode
 			}
 
 			wgPool.Done()
-		}(idWorker)
+		}()
 	}
 
 	go func() {

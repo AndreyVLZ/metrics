@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
-	arg "github.com/AndreyVLZ/metrics/internal/argument"
-	"github.com/AndreyVLZ/metrics/internal/log/zap"
-	"github.com/AndreyVLZ/metrics/internal/shutdown"
-	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
+	"github.com/AndreyVLZ/metrics/pkg/env"
+	mylog "github.com/AndreyVLZ/metrics/pkg/log"
+	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 )
+
+const timeout time.Duration = 7
 
 func main() {
 	var (
@@ -20,14 +21,7 @@ func main() {
 		pollInterval   = agent.PollIntervalDefault
 		reportInterval = agent.ReportIntervalDefault
 		key            = ""
-	)
-
-	args := arg.Array(
-		arg.String(&addr, "ADDRESS"),
-		arg.Int(&pollInterval, "POLL_INTERVAL"),
-		arg.Int(&reportInterval, "REPORT_INTERVAL"),
-		arg.String(&key, "KEY"),
-		arg.Int(&rateLimit, "RATE_LIMIT"),
+		logLevel       = mylog.LevelErr
 	)
 
 	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
@@ -35,35 +29,47 @@ func main() {
 	flag.IntVar(&reportInterval, "r", reportInterval, "частота отправки метрик на сервер")
 	flag.StringVar(&key, "k", key, "ключ")
 	flag.IntVar(&rateLimit, "l", rateLimit, "количество одновременно исходящих запросов на сервер")
+	flag.StringVar(&logLevel, "lvl", logLevel, "уровень логирования")
 
 	flag.Parse()
 
-	for i := range args {
-		err := args[i]()
-		if err != nil {
-			log.Printf("err parse args: %v\n", err)
+	ctx := context.Background()
+	logger := mylog.New(mylog.SlogKey, logLevel)
+
+	vars := env.Array(
+		env.String(&addr, "ADDRESS"),
+		env.Int(&pollInterval, "POLL_INTERVAL"),
+		env.Int(&reportInterval, "REPORT_INTERVAL"),
+		env.String(&key, "KEY"),
+		env.Int(&rateLimit, "RATE_LIMIT"),
+	)
+
+	for i := range vars {
+		if err := vars[i](); err != nil {
+			logger.DebugContext(ctx, "env", "info", err)
 		}
 	}
 
-	cfg := agent.NewConfig(
+	opts := []agent.FuncOpt{
 		agent.SetAddr(addr),
 		agent.SetPollInterval(pollInterval),
 		agent.SetReportInterval(reportInterval),
 		agent.SetRateLimit(rateLimit),
 		agent.SetKey(key),
-	)
+	}
 
-	run(cfg)
+	if err := runAgent(ctx, timeout, logger, opts...); err != nil {
+		logger.ErrorContext(ctx, "start agent", "error", err)
+	}
 }
 
-func run(cfg *agent.Config) {
-	var timeout time.Duration = 7
-
-	logger := zap.New(zap.DefaultConfig())
-	agent := agent.New(cfg, inmemory.New(), logger)
+func runAgent(ctx context.Context, timeout time.Duration, log *slog.Logger, opts ...agent.FuncOpt) error {
+	agent := agent.New(log, opts...)
 	shutdown := shutdown.New(agent, timeout)
 
-	if err := shutdown.Start(context.Background()); err != nil {
-		log.Printf("start agent error: %v\n", err)
+	if err := shutdown.Start(ctx); err != nil {
+		return err
 	}
+
+	return nil
 }
