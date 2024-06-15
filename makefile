@@ -1,6 +1,10 @@
 build:
-	go build -o cmd/agent/agent cmd/agent/main.go
-	go build -o cmd/server/server cmd/server/main.go
+	go build \
+		-ldflags "-X main.buildVersion=v1.0.1 -X 'main.buildDate=$(shell date +'%Y/%m/%d %H:%M:%S')' -X 'main.buildCommit=$(shell git rev-parse HEAD)'" \
+		-o cmd/agent/agent cmd/agent/main.go
+	go build \
+		-ldflags "-X main.buildVersion=v1.0.1 -X 'main.buildDate=$(shell date +'%Y/%m/%d %H:%M:%S')' -X 'main.buildCommit=$(shell git rev-parse HEAD)'" \
+		-o cmd/server/server cmd/server/main.go
 	go build -o cmd/staticlint/staticlint cmd/staticlint/main.go
 test:
 	go test -v ./... -short

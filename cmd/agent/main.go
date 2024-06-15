@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"log"
 	"log/slog"
 	"time"
 
@@ -14,7 +15,15 @@ import (
 
 const timeout time.Duration = 7
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
+	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
+
 	var (
 		addr           = agent.AddressDefault
 		rateLimit      = agent.RateLimitDefault
