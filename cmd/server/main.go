@@ -1,88 +1,82 @@
 package main
 
 import (
+	"context"
 	"flag"
-
-	"github.com/AndreyVLZ/metrics/cmd/server/metricserver"
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"time"
 
 	arg "github.com/AndreyVLZ/metrics/internal/argument"
 	"github.com/AndreyVLZ/metrics/internal/log/zap"
+	"github.com/AndreyVLZ/metrics/internal/shutdown"
+	"github.com/AndreyVLZ/metrics/server"
+	"github.com/AndreyVLZ/metrics/server/adapter"
 )
 
 func main() {
 	var (
-		addr          = metricserver.AddressDefault
-		storeInterval = metricserver.StoreIntervalDefault
-		storagePath   = metricserver.StoragePathDefault
+		addr          = server.AddressDefault
+		storeInterval = server.StoreIntervalDefault
+		storagePath   = server.StoragePathDefault
 		databaseDNS   = ""
-		isRestore     = metricserver.IsRestore
+		isRestore     = server.IsRestoreDefault
 		key           = ""
 	)
 
 	args := arg.Array(
-		arg.String(
-			&addr,
-			"a",
-			"ADDRESS",
-			"адрес эндпоинта HTTP-сервера",
-		),
-		arg.Int(
-			&storeInterval,
-			"i",
-			"STORE_INTERVAL",
-			"интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск",
-		),
-		arg.String(
-			&storagePath,
-			"f",
-			"FILE_STORAGE_PATH",
-			"полное имя файла, куда сохраняются текущие значения",
-		),
-		arg.Bool(
-			&isRestore,
-			"r",
-			"RESTORE",
-			"определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера",
-		),
-		arg.String(
-			&databaseDNS,
-			"d",
-			"DATABASE_DSN",
-			"строка с адресом подключения к БД",
-		),
-		arg.String(
-			&key,
-			"k",
-			"KEY",
-			"ключ",
-		),
+		arg.String(&addr, "ADDRESS"),
+		arg.Int(&storeInterval, "STORE_INTERVAL"),
+		arg.String(&storagePath, "FILE_STORAGE_PATH"),
+		arg.Bool(&isRestore, "RESTORE"),
+		arg.String(&databaseDNS, "DATABASE_DSN"),
+		arg.String(&key, "KEY"),
 	)
 
-	// объявление логера
-	logger := zap.New(zap.DefaultConfig())
+	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
+	flag.IntVar(&storeInterval, "i", storeInterval, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск")
+	flag.StringVar(&storagePath, "f", storagePath, "полное имя файла, куда сохраняются текущие значения")
+	flag.BoolVar(&isRestore, "r", isRestore, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера")
+	flag.StringVar(&databaseDNS, "d", databaseDNS, "строка с адресом подключения к БД")
+	flag.StringVar(&key, "k", key, "ключ")
+
+	flag.Parse()
 
 	for i := range args {
 		err := args[i]()
 		if err != nil {
-			logger.Info("parse args", "err", err)
+			log.Printf("err parse args: %v\n", err)
 		}
 	}
 
-	flag.Parse()
-
-	//сервер
-	srv, err := metricserver.New(
-		logger,
-		metricserver.SetAddr(addr),
-		metricserver.SetStoreInt(storeInterval),
-		metricserver.SetStorePath(storagePath),
-		metricserver.SetRestore(isRestore),
-		metricserver.SetDatabaseDNS(databaseDNS),
-		metricserver.SetKey(key),
+	cfg := server.NewConfig(
+		server.SetAddr(addr),
+		server.SetStoreInt(storeInterval),
+		server.SetStorePath(storagePath),
+		server.SetRestore(isRestore),
+		server.SetDatabaseDNS(databaseDNS),
+		server.SetKey(key),
 	)
-	if err != nil {
-		logger.Error("Err server build %v\n", err)
-	}
 
-	srv.Start()
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
+	run(cfg)
+}
+
+func run(cfg *server.Config) {
+	var timeout time.Duration = 7
+
+	logger := zap.New(zap.DefaultConfig())
+	server := server.New(cfg, logger)
+	shutdown := shutdown.New(
+		adapter.NewShutdown(&server),
+		timeout,
+	)
+
+	if err := shutdown.Start(context.Background()); err != nil {
+		log.Printf("server error: %v\n", err)
+	}
 }
