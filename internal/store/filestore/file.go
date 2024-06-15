@@ -11,10 +11,10 @@ import (
 
 // Структура метрик для хранения в файле.
 type fileMetric struct {
-	NameID string     `json:"mName"`
-	TypeID model.Type `json:"mType"`
 	Val    *float64   `json:"mVal,omitempty"`
 	Delta  *int64     `json:"mDelta,omitempty"`
+	NameID string     `json:"mName"`
+	TypeID model.Type `json:"mType"`
 }
 
 func (fm fileMetric) buildModelMetric() model.Metric {
@@ -34,15 +34,15 @@ func buildFileMetric(met model.Metric) fileMetric {
 }
 
 type File struct {
-	filePath string
 	producer *Producer
 	consumer *Consumer
+	filePath string
 }
 
 type Consumer struct {
-	filePath string
 	file     *os.File
 	scanner  *bufio.Scanner
+	filePath string
 }
 
 func NewConsumer(filePath string) *Consumer {
@@ -67,9 +67,9 @@ func (c *Consumer) Err() error    { return c.scanner.Err() }
 func (c *Consumer) Close() error  { return c.file.Close() }
 
 type Producer struct {
-	filePath string
 	file     *os.File
 	writer   *bufio.Writer
+	filePath string
 }
 
 func NewProducer(filePath string) *Producer {

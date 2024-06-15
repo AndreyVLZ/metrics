@@ -21,8 +21,8 @@ type Storager interface {
 }
 
 type MemStore struct {
-	mu    sync.Mutex
 	store map[model.Info]model.Value
+	mu    sync.Mutex
 }
 
 func New() *MemStore {

@@ -44,13 +44,18 @@ CREATE TABLE metric (
 );`
 )
 
-// Метрика для сканирования из postgres.
+// metricDB структура для сканирования из postgres.
 type metricDB struct {
 	Info  model.Info
 	Delta sql.NullInt64
 	Value sql.NullFloat64
 }
 
+// buildMetric возвращает модель метрики.
+// Вовращает ошибку если:
+// delta == nil,
+// value == nil,
+// тип не подерживается.
 func (m metricDB) buildMetric() (model.Metric, error) {
 	switch m.Info.MType {
 	case model.TypeCountConst:
@@ -75,8 +80,8 @@ type Config struct {
 }
 
 type Postgres struct {
-	cfg Config
 	db  *sql.DB
+	cfg Config
 }
 
 func New(cfg Config) *Postgres {
@@ -102,6 +107,7 @@ func (s *Postgres) Start(ctx context.Context) error {
 	return nil
 }
 
+// Возвращает срез всех метрик из базы.
 func (s *Postgres) List(ctx context.Context) ([]model.Metric, error) {
 	var metDB metricDB
 
@@ -127,13 +133,13 @@ func (s *Postgres) List(ctx context.Context) ([]model.Metric, error) {
 			&metDB.Value,
 		}
 
-		if err := rows.Scan(dest...); err != nil {
-			return nil, fmt.Errorf("row scan: %w", err)
+		if errScan := rows.Scan(dest...); errScan != nil {
+			return nil, fmt.Errorf("row scan: %w", errScan)
 		}
 
-		met, err := metDB.buildMetric()
-		if err != nil {
-			return nil, fmt.Errorf("%w", err)
+		met, errBuild := metDB.buildMetric()
+		if errBuild != nil {
+			return nil, fmt.Errorf("%w", errBuild)
 		}
 
 		arr = append(arr, met)
@@ -147,41 +153,23 @@ func (s *Postgres) List(ctx context.Context) ([]model.Metric, error) {
 	return arr, nil
 }
 
+// AddBatch добавлеяет срез Metric в базу.
+// Реализация в одной транзакции.
 func (s *Postgres) AddBatch(ctx context.Context, arr []model.Metric) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	transaction, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
-	getStmt, err := tx.PrepareContext(ctx, getSQL)
-	if err != nil {
-		return fmt.Errorf("prepare getSQL: %w", err)
-	}
-	defer getStmt.Close()
-
-	setStmt, err := tx.PrepareContext(ctx, setSQL)
-	if err != nil {
-		return fmt.Errorf("preapare setSQL: %w", err)
-	}
-	defer setStmt.Close()
-
-	updStmt, err := tx.PrepareContext(ctx, updSQL)
-	if err != nil {
-		return fmt.Errorf("prepare updSQL: %w", err)
-	}
-	defer updStmt.Close()
-
-	for i := range arr {
-		if _, err := update(ctx, getStmt, setStmt, updStmt, arr[i]); err != nil {
-			if errRoll := tx.Rollback(); errRoll != nil {
-				err = errors.Join(err, fmt.Errorf("txRollback: %w", errRoll))
-			}
-
-			return fmt.Errorf("%w", err)
+	if err := s.addBatchTx(ctx, transaction, arr); err != nil {
+		if errRoll := transaction.Rollback(); errRoll != nil {
+			err = errors.Join(err, fmt.Errorf("txRollback: %w", errRoll))
 		}
+
+		return fmt.Errorf("%w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("txCommit: %w", err)
 	}
 
@@ -214,6 +202,34 @@ func (s *Postgres) Update(ctx context.Context, met model.Metric) (model.Metric, 
 	}
 
 	return update(ctx, getStmt, setStmt, updStmt, met)
+}
+
+func (s *Postgres) addBatchTx(ctx context.Context, tx *sql.Tx, arr []model.Metric) error {
+	getStmt, err := tx.PrepareContext(ctx, getSQL)
+	if err != nil {
+		return fmt.Errorf("prepare getSQL: %w", err)
+	}
+	defer getStmt.Close()
+
+	setStmt, err := tx.PrepareContext(ctx, setSQL)
+	if err != nil {
+		return fmt.Errorf("preapare setSQL: %w", err)
+	}
+	defer setStmt.Close()
+
+	updStmt, err := tx.PrepareContext(ctx, updSQL)
+	if err != nil {
+		return fmt.Errorf("prepare updSQL: %w", err)
+	}
+	defer updStmt.Close()
+
+	for i := range arr {
+		if _, err := update(ctx, getStmt, setStmt, updStmt, arr[i]); err != nil {
+			return fmt.Errorf("%w", err)
+		}
+	}
+
+	return nil
 }
 
 // Вызывает подготовленный запрос на получение метрики,

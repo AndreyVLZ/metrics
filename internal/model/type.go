@@ -9,7 +9,7 @@ type Type int8
 
 const totalTypes = 2 // Кол-во типов для метрик.
 
-// Получение типа из строки. Ошибка если тип не поддерживается.
+// ParseType получение типа из строки. Ошибка если тип не поддерживается.
 func ParseType(typeStr string) (Type, error) {
 	switch typeStr {
 	case TypeCountConst.String():
@@ -17,13 +17,14 @@ func ParseType(typeStr string) (Type, error) {
 	case TypeGaugeConst.String():
 		return TypeGaugeConst, nil
 	default:
-		return 0, errTypeNotSupport
+		return 0, ErrTypeNotSupport
 	}
 }
 
-// Возващает имя для типа метрики.
+// String возващает имя для типа метрики.
 func (t Type) String() string { return supportTypeMetric()[t] }
 
+// supportTypeMetric возвращает массив имён поддерживаемых типов метрик.
 func supportTypeMetric() [totalTypes]string {
 	return [totalTypes]string{
 		"counter",

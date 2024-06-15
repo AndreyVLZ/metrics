@@ -1,4 +1,5 @@
-// Реализация Ping метода для store.
+// Определяет для интерфейса storage
+// Дополнительный метод 'заглушку' Ping.
 package adapter
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/AndreyVLZ/metrics/internal/model"
 )
 
+// storage интерфейс хранилища.
 type storage interface {
 	Name() string
 	Start(ctx context.Context) error
@@ -17,14 +19,19 @@ type storage interface {
 	AddBatch(ctx context.Context, arr []model.Metric) error
 }
 
+// PingAdapter хранит интерфейс хранилища.
+// Через 'встраивание' storage определяем для
+// PingAdapter все методы интeрфейса.
 type PingAdapter struct {
 	storage
 }
 
+// Ping возвращает PingAdapter для хранилища store.
 func Ping(store storage) PingAdapter {
 	return PingAdapter{
 		storage: store,
 	}
 }
 
+// Ping возращает нулевую ошибку.
 func (pa PingAdapter) Ping() error { return nil }

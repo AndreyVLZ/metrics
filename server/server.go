@@ -27,13 +27,15 @@ type IService interface {
 
 // Сервер.
 type Server struct {
-	cfg      *Config
 	api      iAPI
-	services []IService
+	cfg      *config
 	log      *slog.Logger
+	services []IService
 }
 
-func New(cfg *Config, log *slog.Logger) Server {
+func New(log *slog.Logger, opts ...FuncOpt) Server {
+	cfg := newConfig(opts...)
+
 	store := store.New(
 		store.Config{
 			ConnDB:    cfg.dbDNS,
@@ -71,8 +73,7 @@ func New(cfg *Config, log *slog.Logger) Server {
 
 // Запуск сервера.
 func (srv *Server) Start(ctx context.Context) error {
-	srv.log.LogAttrs(ctx,
-		slog.LevelInfo, "start server",
+	srv.log.DebugContext(ctx, "start server",
 		slog.String("addr", srv.cfg.addr),
 		slog.Group("flags",
 			slog.Int("storeInterval", srv.cfg.storeInt),
@@ -88,7 +89,7 @@ func (srv *Server) Start(ctx context.Context) error {
 			return fmt.Errorf("%w", err)
 		}
 
-		srv.log.Info("services Start", "name", srv.services[i].Name())
+		srv.log.DebugContext(ctx, "services started", "name", srv.services[i].Name())
 	}
 
 	return srv.api.Start()
@@ -101,9 +102,11 @@ func (srv *Server) Stop(ctx context.Context) error {
 		errs = append(errs, err)
 	}
 
-	for _, srv := range srv.services {
-		if err := srv.Stop(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("service [%s] err: %w", srv.Name(), err))
+	for i := range srv.services {
+		if err := srv.services[i].Stop(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("service [%s] err: %w", srv.services[i].Name(), err))
+		} else {
+			srv.log.DebugContext(ctx, "services stopped", "name", srv.services[i].Name())
 		}
 	}
 

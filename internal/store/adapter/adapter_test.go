@@ -6,8 +6,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type fakeStore struct {
+	storage
+}
+
 func TestPing(t *testing.T) {
-	var storage storage
+	storage := &fakeStore{}
 
 	adapter := Ping(storage)
 

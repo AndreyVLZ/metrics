@@ -18,7 +18,6 @@ type Config struct {
 func NewServer(cfg Config, h http.Handler) Server {
 	return Server{
 		server: &http.Server{
-			// ReadHeaderTimeout: 2 * time.Second,
 			Addr:    cfg.Addr,
 			Handler: h,
 		},

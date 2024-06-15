@@ -9,20 +9,20 @@ const (
 )
 
 // Опции для конфига.
-type FuncOpt func(cfg *Config)
+type FuncOpt func(cfg *config)
 
 // Конфиг для агента.
-type Config struct {
+type config struct {
 	addr           string
+	key            string
 	pollInterval   int
 	reportInterval int
 	rateLimit      int
-	key            string
 }
 
 // Новый конфиг с установленными опциями.
-func NewConfig(opts ...FuncOpt) *Config {
-	cfg := &Config{
+func newConfig(opts ...FuncOpt) *config {
+	cfg := &config{
 		addr:           AddressDefault,
 		pollInterval:   PollIntervalDefault,
 		reportInterval: ReportIntervalDefault,
@@ -39,35 +39,35 @@ func NewConfig(opts ...FuncOpt) *Config {
 
 // Установка адреса эндпоинта HTTP-сервера.
 func SetAddr(addr string) FuncOpt {
-	return func(cfg *Config) {
+	return func(cfg *config) {
 		cfg.addr = addr
 	}
 }
 
 // Установка частоты опроса метрик из пакета runtime.
 func SetPollInterval(pollInterval int) FuncOpt {
-	return func(cfg *Config) {
+	return func(cfg *config) {
 		cfg.pollInterval = pollInterval
 	}
 }
 
 // Установка частоты отправки метрик на сервер.
 func SetReportInterval(reportInterval int) FuncOpt {
-	return func(cfg *Config) {
+	return func(cfg *config) {
 		cfg.reportInterval = reportInterval
 	}
 }
 
 // Установка ключа.
 func SetKey(key string) FuncOpt {
-	return func(cfg *Config) {
+	return func(cfg *config) {
 		cfg.key = key
 	}
 }
 
 // Установка количества одновременно исходящих запросов на сервер.
 func SetRateLimit(rateLimit int) FuncOpt {
-	return func(cfg *Config) {
+	return func(cfg *config) {
 		cfg.rateLimit = rateLimit
 	}
 }

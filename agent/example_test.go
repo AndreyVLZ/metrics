@@ -2,35 +2,46 @@ package agent_test
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
-	"github.com/AndreyVLZ/metrics/internal/log/slog"
-	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
+	"github.com/AndreyVLZ/metrics/pkg/log"
 )
 
 func ExampleNew() {
 	ctx := context.Background()
-	log := slog.New()
 
-	cfg := agent.NewConfig(
-		agent.SetAddr("localhost:8080"),
-		agent.SetPollInterval(10),
-	)
+	// Контекст запуска агента.
+	ctxStart, cancelStart := context.WithCancel(ctx)
+	defer cancelStart()
 
-	store := inmemory.New()
-	agent := agent.New(cfg, store, log)
+	// Контекст имитации работы агента.
+	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelTimeout()
 
-	if err := agent.Start(ctx); err != nil {
-		log.Error("agent start", "err", err)
+	// Контекст остановки агента.
+	ctxStop, cancelStop := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelStop()
+
+	agent := agent.New(log.New(log.SlogKey, log.LevelErr))
+
+	// Функция agent.Start неблокирующая.
+	// Ошибки при работе Агента идут в agent.Err
+	if err := agent.Start(ctxStart); err != nil {
+		fmt.Printf("start Agent err: %v\n", err)
 	}
 
-	for err := range agent.Err() {
-		log.Error("agent run", "err", err)
+	select {
+	case <-ctxTimeout.Done(): // по прошествии timeout отменяем работу агента.
+		cancelStart()
+	case err := <-agent.Err(): // читаем ошибки, которые могут возникнуть при работе агента.
+		fmt.Printf("run Agent err: %v\n", err)
 	}
 
-	if err := agent.Stop(ctx); err != nil {
-		log.Error("agent stop", "err", err)
+	if err := agent.Stop(ctxStop); err != nil {
+		fmt.Printf("stop Agent err: %v\n", err)
 	}
 
-	// Output: nil
+	// Output:
 }

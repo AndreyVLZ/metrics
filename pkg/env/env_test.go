@@ -1,4 +1,4 @@
-package argument
+package env
 
 import (
 	"flag"

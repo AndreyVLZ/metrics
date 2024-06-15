@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 )
@@ -70,7 +71,7 @@ func PostUpdateHandle(srv srvUpdater, log *slog.Logger, fn func(req *http.Reques
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		metStr := fn(req)
 
-		met, err := model.ParseMetricJSON(metStr)
+		met, err := parseMetricJSON(metStr)
 		if err != nil {
 			log.Error("postUpdateHandler", "parse", err)
 			http.Error(rw, err.Error(), http.StatusBadRequest)
@@ -168,6 +169,7 @@ func PostValueHandle(srv srvGetter, log *slog.Logger) http.Handler {
 func PostUpdatesHandler(srv srvBatch, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		var list []model.MetricJSON
+
 		body := req.Body
 		defer body.Close()
 
@@ -242,4 +244,30 @@ func metricFromBoby(body io.ReadCloser) (model.MetricJSON, error) {
 	}
 
 	return metricJSON, nil
+}
+
+// parseMetricJSON возвращает model.MetricJSON из model.MetricStr.
+// Возможные ошибки:
+// - при конвертации delta[string] > int64, если тип counter,
+// - при конвертации value[string] > float64, если тип gauge,
+// - model.ErrTypeNotSupport, если тип не поддерживается.
+func parseMetricJSON(metStr model.MetricStr) (model.MetricJSON, error) {
+	switch metStr.MType {
+	case model.TypeCountConst.String():
+		val, err := strconv.ParseInt(metStr.Val, 10, 64)
+		if err != nil {
+			return model.MetricJSON{}, fmt.Errorf("parseInt: %w", err)
+		}
+
+		return model.MetricJSON{ID: metStr.Name, MType: metStr.MType, Delta: &val}, nil
+	case model.TypeGaugeConst.String():
+		val, err := strconv.ParseFloat(metStr.Val, 64)
+		if err != nil {
+			return model.MetricJSON{}, fmt.Errorf("parseFloat: %w", err)
+		}
+
+		return model.MetricJSON{ID: metStr.Name, MType: metStr.MType, Value: &val}, nil
+	default:
+		return model.MetricJSON{}, model.ErrTypeNotSupport
+	}
 }

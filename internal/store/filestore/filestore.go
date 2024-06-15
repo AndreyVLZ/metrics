@@ -37,10 +37,10 @@ type iFile interface {
 
 type FileStore struct {
 	storage
-	cfg      Config
 	file     iFile
-	isDeamon bool
 	exit     chan struct{}
+	cfg      Config
+	isDeamon bool
 }
 
 func New(cfg Config, store storage) *FileStore {

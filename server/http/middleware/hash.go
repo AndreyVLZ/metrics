@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/AndreyVLZ/metrics/internal/hash"
+	"github.com/AndreyVLZ/metrics/pkg/hash"
 )
 
 type hashWriter struct {
@@ -36,10 +36,6 @@ func (hw *hashWriter) WriteHeader(statusCode int) {
 
 func (hw *hashWriter) Write(p []byte) (int, error) {
 	return hw.buf.Write(p)
-}
-
-type myReaderCloser struct {
-	body io.ReadCloser
 }
 
 // Хеширование данных.
