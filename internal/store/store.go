@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 	"github.com/AndreyVLZ/metrics/internal/store/adapter"
@@ -33,7 +34,7 @@ type Config struct {
 	ConnDB    string
 	StorePath string
 	IsRestore bool
-	StoreInt  int
+	StoreInt  time.Duration
 }
 
 func New(cfg Config) Storage {

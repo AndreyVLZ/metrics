@@ -1,14 +1,23 @@
+// Запускает Агент.
+// Параметры Агента (задаются через [falg] и/или [env]):
+// - адрес эндпоинта HTTP-сервера (default "localhost:8080") [-a] [ADDRESS]
+// - частота опроса метрик из пакета runtime (default 2) [-p] [POLL_INTERVAL]
+// - частота отправки метрик на сервер (default 10) [-r] [REPORT_INTERVAL]
+// - количество одновременно исходящих запросов на сервер (default 10) [-l] [RATE_LIMIT]
+// - ключ для подписи передаваемых данных [-k] [KEY]
+// - путь до файла с публичным ключом для шифрования (default "/tmp/public.pem") [-crypto-key] [CRYPTO_KEY]
+// - уровень логирования (default "err") [-lvl] [LVL]
 package main
 
 import (
 	"context"
 	"flag"
 	"log"
-	"log/slog"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
-	"github.com/AndreyVLZ/metrics/pkg/env"
+	"github.com/AndreyVLZ/metrics/agent/config"
+	"github.com/AndreyVLZ/metrics/pkg/flagenv"
 	mylog "github.com/AndreyVLZ/metrics/pkg/log"
 	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 )
@@ -25,60 +34,51 @@ func main() {
 	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
 
 	var (
-		addr           = agent.AddressDefault
-		rateLimit      = agent.RateLimitDefault
-		pollInterval   = agent.PollIntervalDefault
-		reportInterval = agent.ReportIntervalDefault
-		key            = ""
-		logLevel       = mylog.LevelErr
+		addr           string
+		pollInterval   int
+		reportInterval int
+		key            string
+		rateLimit      int
+		publicKeyPath  string
+		logLevel       string
 	)
 
-	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
-	flag.IntVar(&pollInterval, "p", pollInterval, "частота опроса метрик из пакета runtime")
-	flag.IntVar(&reportInterval, "r", reportInterval, "частота отправки метрик на сервер")
-	flag.StringVar(&key, "k", key, "ключ")
-	flag.IntVar(&rateLimit, "l", rateLimit, "количество одновременно исходящих запросов на сервер")
-	flag.StringVar(&logLevel, "lvl", logLevel, "уровень логирования")
+	if err := flagenv.New(
+		flagenv.String(&addr, "ADDRESS", "a", agent.AddressDefault, "адрес эндпоинта HTTP-сервера"),
+		flagenv.Int(&pollInterval, "POLL_INTERVAL", "p", agent.PollIntervalDefault, "частота опроса метрик из пакета runtime"),
+		flagenv.Int(&reportInterval, "REPORT_INTERVAL", "r", agent.ReportIntervalDefault, "частота отправки метрик на сервер"),
+		flagenv.String(&key, "KEY", "k", "", "ключ"),
+		flagenv.Int(&rateLimit, "RATE_LIMIT", "l", agent.ReportIntervalDefault, "количество одновременно исходящих запросов на сервер"),
+		flagenv.String(&publicKeyPath, "CRYPTO_KEY", "crypto-key", agent.CryproKeyPathDefault, "путь до файла с публичным ключом"),
+		flagenv.String(&logLevel, "LVL", "lvl", mylog.LevelErr, "уровень логирования"),
+	); err != nil {
+		log.Printf("flagenv: %v\n", err)
+
+		return
+	}
 
 	flag.Parse()
-
 	ctx := context.Background()
 	logger := mylog.New(mylog.SlogKey, logLevel)
 
-	vars := env.Array(
-		env.String(&addr, "ADDRESS"),
-		env.Int(&pollInterval, "POLL_INTERVAL"),
-		env.Int(&reportInterval, "REPORT_INTERVAL"),
-		env.String(&key, "KEY"),
-		env.Int(&rateLimit, "RATE_LIMIT"),
+	cfg, err := config.New(
+		config.SetAddr(addr),
+		config.SetPollInterval(pollInterval),
+		config.SetReportInterval(reportInterval),
+		config.SetRateLimit(rateLimit),
+		config.SetKey(key),
+		config.SetCryptoKeyPath(publicKeyPath),
 	)
 
-	for i := range vars {
-		if err := vars[i](); err != nil {
-			logger.DebugContext(ctx, "env", "info", err)
-		}
+	if err != nil {
+		logger.Error("config new", "error", err)
+
+		return
 	}
 
-	opts := []agent.FuncOpt{
-		agent.SetAddr(addr),
-		agent.SetPollInterval(pollInterval),
-		agent.SetReportInterval(reportInterval),
-		agent.SetRateLimit(rateLimit),
-		agent.SetKey(key),
+	agent := agent.New(logger, cfg)
+
+	if err := shutdown.New(agent, timeout).Start(ctx); err != nil {
+		logger.Error("shutdown", "error", err)
 	}
-
-	if err := runAgent(ctx, timeout, logger, opts...); err != nil {
-		logger.ErrorContext(ctx, "start agent", "error", err)
-	}
-}
-
-func runAgent(ctx context.Context, timeout time.Duration, log *slog.Logger, opts ...agent.FuncOpt) error {
-	agent := agent.New(log, opts...)
-	shutdown := shutdown.New(agent, timeout)
-
-	if err := shutdown.Start(ctx); err != nil {
-		return err
-	}
-
-	return nil
 }

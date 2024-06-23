@@ -1,15 +1,16 @@
+// Запускает Сервер.
+// Параметры Сервера (задаются через [falg] и/или [env]):
 package main
 
 import (
 	"context"
 	"flag"
 	"log"
-	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
 	"time"
 
-	"github.com/AndreyVLZ/metrics/pkg/env"
+	"github.com/AndreyVLZ/metrics/pkg/flagenv"
 	mylog "github.com/AndreyVLZ/metrics/pkg/log"
 	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 	"github.com/AndreyVLZ/metrics/server"
@@ -28,43 +29,34 @@ func main() {
 	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
 
 	var (
-		addr          = server.AddressDefault
-		storeInterval = server.StoreIntervalDefault
-		storagePath   = server.StoragePathDefault
-		databaseDNS   = ""
-		isRestore     = server.IsRestoreDefault
-		key           = ""
-		logLevel      = mylog.LevelInfo
+		addr           string
+		storeInterval  int
+		storagePath    string
+		databaseDNS    string
+		isRestore      bool
+		key            string
+		logLevel       string
+		privateKeyPath string
+		configPath     string
 	)
 
-	flag.StringVar(&addr, "a", addr, "адрес эндпоинта HTTP-сервера")
-	flag.IntVar(&storeInterval, "i", storeInterval, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск")
-	flag.StringVar(&storagePath, "f", storagePath, "полное имя файла, куда сохраняются текущие значения")
-	flag.BoolVar(&isRestore, "r", isRestore, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера")
-	flag.StringVar(&databaseDNS, "d", databaseDNS, "строка с адресом подключения к БД")
-	flag.StringVar(&key, "k", key, "ключ")
-	flag.StringVar(&logLevel, "lvl", logLevel, "уровень логирования")
+	if err := flagenv.New(
+		flagenv.String(&addr, "ADDRESS", "a", server.AddressDefault, "адрес эндпоинта HTTP-сервера"),
+		flagenv.Int(&storeInterval, "STORE_INTERVAL", "i", server.StoreIntervalDefault, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск"),
+		flagenv.String(&storagePath, "FILE_STORAGE_PATH", "f", server.StoragePathDefault, "полное имя файла, куда сохраняются текущие значения"),
+		flagenv.String(&databaseDNS, "DATABASE_DSN", "d", "", "строка с адресом подключения к БД"),
+		flagenv.String(&key, "KEY", "k", "", "ключ"),
+		flagenv.Bool(&isRestore, "RESTORE", "r", server.IsRestoreDefault, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера"),
+		flagenv.String(&privateKeyPath, "CRYPTO_KEY", "crypto-key", server.CryptoKeyPathDefault, "путь до файла с приватным ключом"),
+		flagenv.String(&configPath, "CONFIG", "c", "", "путь до файла конфигурации"),
+		flagenv.String(&logLevel, "LVL", "lvl", mylog.LevelErr, "уровень логирования"),
+	); err != nil {
+		log.Printf("flagenv: %v\n", err)
+
+		return
+	}
 
 	flag.Parse()
-
-	ctx := context.Background()
-	logger := mylog.New(mylog.SlogKey, logLevel)
-
-	vars := env.Array(
-		env.String(&addr, "ADDRESS"),
-		env.Int(&storeInterval, "STORE_INTERVAL"),
-		env.String(&storagePath, "FILE_STORAGE_PATH"),
-		env.Bool(&isRestore, "RESTORE"),
-		env.String(&databaseDNS, "DATABASE_DSN"),
-		env.String(&key, "KEY"),
-	)
-
-	for i := range vars {
-		err := vars[i]()
-		if err != nil {
-			logger.DebugContext(ctx, err.Error())
-		}
-	}
 
 	opts := []server.FuncOpt{
 		server.SetAddr(addr),
@@ -73,19 +65,40 @@ func main() {
 		server.SetRestore(isRestore),
 		server.SetDatabaseDNS(databaseDNS),
 		server.SetKey(key),
+		server.SetCryptoKeyPath(privateKeyPath),
+	}
+
+	ctx := context.Background()
+	logger := mylog.New(mylog.SlogKey, logLevel)
+
+	cfg, err := server.NewConfig(configPath, opts...)
+	if err != nil {
+		logger.Error("new config", "error", err)
+
+		return
 	}
 
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	if err := runServer(ctx, timeout, logger, opts...); err != nil {
-		logger.ErrorContext(ctx, "start server", "error", err)
+	server := server.New(cfg, logger)
+	shutdown := shutdown.New(
+		adapter.NewShutdown(&server),
+		timeout,
+	)
+
+	if err := shutdown.Start(ctx); err != nil {
+		logger.Error("start server", "error", err)
 	}
 }
 
-func runServer(ctx context.Context, timeout time.Duration, log *slog.Logger, opts ...server.FuncOpt) error {
-	server := server.New(log, opts...)
+/*
+func runServer(logger *slog.Logger, opts ...server.FuncOpt) error {
+	ctx := context.Background()
+
+	cfg := server.NewConfig(opts...)
+	server := server.New(cfg, logger)
 	shutdown := shutdown.New(
 		adapter.NewShutdown(&server),
 		timeout,
@@ -93,3 +106,4 @@ func runServer(ctx context.Context, timeout time.Duration, log *slog.Logger, opt
 
 	return shutdown.Start(ctx)
 }
+*/
