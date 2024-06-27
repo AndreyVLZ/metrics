@@ -24,7 +24,7 @@ type storage interface {
 type Config struct {
 	StorePath string
 	IsRestore bool
-	StoreInt  int
+	StoreInt  time.Duration
 }
 
 type iFile interface {
@@ -114,9 +114,7 @@ func (fs *FileStore) Stop(ctx context.Context) error {
 func (fs *FileStore) run(ctx context.Context) {
 	for {
 		select {
-		case <-time.After(time.Duration(fs.cfg.StoreInt) * time.Second):
-			fmt.Println("FLUSH")
-
+		case <-time.After(fs.cfg.StoreInt):
 			if err := saved(ctx, fs.storage, fs.file); err != nil {
 				log.Printf("err save metrics %v\n", err)
 			}

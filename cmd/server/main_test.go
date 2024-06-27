@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/AndreyVLZ/metrics/pkg/log"
-	"github.com/AndreyVLZ/metrics/server"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 func TestServerRun(t *testing.T) {
@@ -20,25 +19,25 @@ func TestServerRun(t *testing.T) {
 	ctxStart, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	opts := []server.FuncOpt{
-		server.SetStorePath(""),
-		server.SetRestore(false),
-	}
+	cfg := config.Default()
 
-	log := log.New(log.SlogKey, log.LevelErr)
+	log := slog.Default()
 	chErr := make(chan error)
 
 	go func() {
 		defer close(chErr)
 
-		if err := runServer(ctxStart, 2, log, opts...); err != nil {
+		if err := runServer(cfg, log); err != nil {
 			chErr <- err
 		}
 	}()
 
 	cancel()
-
-	if err := <-chErr; err != nil && !errors.Is(err, context.Canceled) {
-		t.Errorf("run server err: %v", err)
+	select {
+	case <-ctxStart.Done():
+	case err := <-chErr:
+		if err != nil {
+			t.Errorf("run agent err: %v", err)
+		}
 	}
 }
