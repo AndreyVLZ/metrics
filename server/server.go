@@ -28,14 +28,12 @@ type IService interface {
 // Сервер.
 type Server struct {
 	api      iAPI
-	cfg      *config
+	cfg      *Config
 	log      *slog.Logger
 	services []IService
 }
 
-func New(log *slog.Logger, opts ...FuncOpt) Server {
-	cfg := newConfig(opts...)
-
+func New(cfg *Config, log *slog.Logger) Server {
 	store := store.New(
 		store.Config{
 			ConnDB:    cfg.dbDNS,
@@ -48,10 +46,11 @@ func New(log *slog.Logger, opts ...FuncOpt) Server {
 	srv := service.New(store)
 	mux := api.NewRoute(srv, log)
 	handler := m.Logging(log,
-		m.Gzip(
-			m.Hash(
-				cfg.key,
-				mux,
+		m.Decrypt(cfg.privateKey,
+			m.Gzip(
+				m.Hash(cfg.key,
+					mux,
+				),
 			),
 		),
 	)
@@ -76,11 +75,12 @@ func (srv *Server) Start(ctx context.Context) error {
 	srv.log.DebugContext(ctx, "start server",
 		slog.String("addr", srv.cfg.addr),
 		slog.Group("flags",
-			slog.Int("storeInterval", srv.cfg.storeInt),
+			slog.String("storeInterval", srv.cfg.storeInt.String()),
 			slog.String("storePath", srv.cfg.storePath),
 			slog.Bool("restore", srv.cfg.isRestore),
 			slog.String("dbDNS", srv.cfg.dbDNS),
 			slog.String("key", srv.cfg.key),
+			slog.String("privateKeyPath", srv.cfg.cryptoKeyPath),
 		),
 	)
 

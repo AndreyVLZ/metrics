@@ -16,7 +16,7 @@ import (
 func ExampleShutdown_agent() {
 	ctx := context.Background()
 	log := log.New(log.SlogKey, log.LevelErr)
-	agent := agent.New(log)
+	agent := agent.New(log, agent.SetAddr("localhost:8081"))
 	shuwdown := shutdown.New(agent, 2*time.Second)
 
 	// Имитация сигнала прерывания.
@@ -36,7 +36,7 @@ func ExampleShutdown_agent() {
 func ExampleShutdown_server() {
 	ctx := context.Background()
 	log := log.New(log.SlogKey, log.LevelErr)
-	server := server.New(log, server.SetStorePath(""))
+	server := server.New(log, server.SetAddr("localhost:8082"), server.SetStorePath(""))
 	shuwdown := shutdown.New(adapter.NewShutdown(&server), 2*time.Second)
 
 	// Имитация сигнала прерывания.

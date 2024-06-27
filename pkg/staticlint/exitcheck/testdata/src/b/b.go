@@ -5,5 +5,5 @@ import os "a"
 
 func main() {
 	// допустимо
-	os.Exit(1)
+	os.Exit(1) // want "вызов os.Exit"
 }

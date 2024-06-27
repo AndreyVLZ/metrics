@@ -5,9 +5,11 @@ const (
 	PollIntervalDefault   = 2                // Значение по умолчания для частоты опроса метрик из пакета runtime.
 	ReportIntervalDefault = 10               // Значение по умолчания для частоты отправки метрик на сервер.
 	RateLimitDefault      = 3                // Значение по умолчания для количества одновременно исходящих запросов на сервер.
-	KeyDafault            = "SECRET_KEY"     // Значение по умолчания для ключа.
+	// KeyDafault            = "SECRET_KEY"      // Значение по умолчания для ключа.
+	CryproKeyPathDefault = "/tmp/public.pem" // Значение по умолчания для пути до файла с публичным ключом
 )
 
+/*
 // Опции для конфига.
 type FuncOpt func(cfg *config)
 
@@ -18,6 +20,8 @@ type config struct {
 	pollInterval   int
 	reportInterval int
 	rateLimit      int
+	cryptoKeyPath  string
+	publicKey      *rsa.PublicKey
 }
 
 // Новый конфиг с установленными опциями.
@@ -71,3 +75,11 @@ func SetRateLimit(rateLimit int) FuncOpt {
 		cfg.rateLimit = rateLimit
 	}
 }
+
+// Установка пути до файла с публичным ключом.
+func SetCryptoKeyPath(cryptoKeyPath string) FuncOpt {
+	return func(cfg *config) {
+		cfg.cryptoKeyPath = cryptoKeyPath
+	}
+}
+*/
