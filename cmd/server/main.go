@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	_ "net/http/pprof"
 	"os"
+	"syscall"
 	"time"
 
 	mylog "github.com/AndreyVLZ/metrics/pkg/log"
@@ -157,7 +158,13 @@ func runServer(cfg *config.Config, mlog *slog.Logger) error {
 		timeout,
 	)
 
-	return shutdown.Start(ctx)
+	signals := []os.Signal{
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	}
+
+	return shutdown.Start(ctx, signals...)
 }
 
 /*

@@ -23,6 +23,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
@@ -140,5 +141,11 @@ func runAgent(cfg *config.Config, mlog *slog.Logger) error {
 
 	agent := agent.New(cfg, mlog)
 
-	return shutdown.New(agent, timeout).Start(ctx)
+	signals := []os.Signal{
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	}
+
+	return shutdown.New(agent, timeout).Start(ctx, signals...)
 }

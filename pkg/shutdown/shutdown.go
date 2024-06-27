@@ -41,14 +41,16 @@ func New(delegate StartStoper, timeout time.Duration) *Shutdown {
 }
 
 // Start запускает Shutdown.
-func (s *Shutdown) Start(ctx context.Context) error {
+func (s *Shutdown) Start(ctx context.Context, signals ...os.Signal) error {
 	var err error
 
 	ctxCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Контекст для сигнала os
-	ctxSinal, stopSignal := signal.NotifyContext(ctx, os.Interrupt)
+
+	ctxSinal, stopSignal := signal.NotifyContext(ctx, signals...)
+
 	defer stopSignal()
 
 	if err = s.delegate.Start(ctxCancel); err != nil {

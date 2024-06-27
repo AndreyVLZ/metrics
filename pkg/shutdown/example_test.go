@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"syscall"
 	"time"
 
@@ -32,7 +33,13 @@ func ExampleShutdown_agent() {
 		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 	}()
 
-	if err := shuwdown.Start(ctx); err != nil {
+	signals := []os.Signal{
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	}
+
+	if err := shuwdown.Start(ctx, signals...); err != nil {
 		fmt.Println(err)
 	}
 
@@ -51,13 +58,19 @@ func ExampleShutdown_server() {
 	server := server.New(cfg, slog.Default())
 	shuwdown := shutdown.New(adapter.NewShutdown(&server), 2*time.Second)
 
+	signals := []os.Signal{
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	}
+
 	// Имитация сигнала прерывания.
 	go func() {
 		time.Sleep(2 * time.Second)
 		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 	}()
 
-	if err := shuwdown.Start(ctx); err != nil {
+	if err := shuwdown.Start(ctx, signals...); err != nil {
 		fmt.Println(err)
 	}
 
