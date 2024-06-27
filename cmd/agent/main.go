@@ -1,24 +1,38 @@
 // Запускает Агент.
-// Параметры Агента (задаются через [falg] и/или [env]):
-// - адрес эндпоинта HTTP-сервера (default "localhost:8080") [-a] [ADDRESS]
-// - частота опроса метрик из пакета runtime (default 2) [-p] [POLL_INTERVAL]
-// - частота отправки метрик на сервер (default 10) [-r] [REPORT_INTERVAL]
-// - количество одновременно исходящих запросов на сервер (default 10) [-l] [RATE_LIMIT]
-// - ключ для подписи передаваемых данных [-k] [KEY]
-// - путь до файла с публичным ключом для шифрования (default "/tmp/public.pem") [-crypto-key] [CRYPTO_KEY]
-// - уровень логирования (default "err") [-lvl] [LVL]
+// Параметры Агента (задаются через [configPath] и/или [falg] и/или [env]):
+//   - адрес эндпоинта HTTP-сервера
+//     ["localhost:8080"] [-a] [ADDRESS]
+//   - путь до файла конфигурации
+//     [""] [-c] [CONFIG]
+//   - путь до файла с публичным ключом для шифрования
+//     ["/tmp/public.pem"] [-crypto-key] [CRYPTO_KEY]
+//   - ключ для подписи передаваемых данных
+//     [""][-k] [KEY]
+//   - количество одновременно исходящих запросов на сервер
+//     [10] [-l] [RATE_LIMIT]
+//   - частота опроса метрик из пакета runtime
+//     [2] [-p] [POLL_INTERVAL]
+//   - уровень логирования
+//     ["err"] [-lvl] [LVL]
+//   - частота отправки метрик на сервер
+//     [10] [-r] [REPORT_INTERVAL]
 package main
 
 import (
 	"context"
-	"flag"
 	"log"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
 	"github.com/AndreyVLZ/metrics/agent/config"
-	"github.com/AndreyVLZ/metrics/pkg/flagenv"
 	mylog "github.com/AndreyVLZ/metrics/pkg/log"
+	"github.com/AndreyVLZ/metrics/pkg/parser"
+	"github.com/AndreyVLZ/metrics/pkg/parser/convert"
+	"github.com/AndreyVLZ/metrics/pkg/parser/env"
+	"github.com/AndreyVLZ/metrics/pkg/parser/field"
+	"github.com/AndreyVLZ/metrics/pkg/parser/flag"
 	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 )
 
@@ -34,51 +48,97 @@ func main() {
 	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
 
 	var (
-		addr           string
-		pollInterval   int
-		reportInterval int
-		key            string
-		rateLimit      int
-		publicKeyPath  string
-		logLevel       string
+		addr           = config.AddressDefault
+		rateLimit      = config.RateLimitDefault
+		logLevel       = config.LogLevelDefault
+		pollInterval   = config.PollIntervalDefault
+		reportInterval = config.ReportIntervalDefault
+		configPath     = ""
+		key            = ""
+		cryptoKeyPath  = ""
 	)
 
-	if err := flagenv.New(
-		flagenv.String(&addr, "ADDRESS", "a", agent.AddressDefault, "адрес эндпоинта HTTP-сервера"),
-		flagenv.Int(&pollInterval, "POLL_INTERVAL", "p", agent.PollIntervalDefault, "частота опроса метрик из пакета runtime"),
-		flagenv.Int(&reportInterval, "REPORT_INTERVAL", "r", agent.ReportIntervalDefault, "частота отправки метрик на сервер"),
-		flagenv.String(&key, "KEY", "k", "", "ключ"),
-		flagenv.Int(&rateLimit, "RATE_LIMIT", "l", agent.ReportIntervalDefault, "количество одновременно исходящих запросов на сервер"),
-		flagenv.String(&publicKeyPath, "CRYPTO_KEY", "crypto-key", agent.CryproKeyPathDefault, "путь до файла с публичным ключом"),
-		flagenv.String(&logLevel, "LVL", "lvl", mylog.LevelErr, "уровень логирования"),
-	); err != nil {
-		log.Printf("flagenv: %v\n", err)
+	parser.File(&configPath,
+		flag.String("c", "путь до файла конфигурации"),
+		env.String("CONFIG"),
+	)
+
+	parser.Value(&pollInterval,
+		field.Duration("poll_interval"),
+		convert.IntToDuration(time.Second,
+			flag.Int("p", "частота опроса метрик из пакета runtime"),
+			env.Int("POLL_INTERVAL"),
+		),
+	)
+
+	parser.Value(&reportInterval,
+		field.Duration("report_interval"),
+		convert.IntToDuration(time.Second,
+			flag.Int("r", "частота отправки метрик на сервер"),
+			env.Int("POLL_INTERVAL"),
+		),
+	)
+
+	parser.Value(&rateLimit,
+		flag.Int("l", "количество одновременно исходящих запросов на сервер"),
+		env.Int("RATE_LIMIT"),
+	)
+
+	parser.Value(&addr,
+		field.String("address"),
+		flag.String("a", "адрес эндпоинта HTTP-сервера"),
+		env.String("ADDRESS"),
+	)
+
+	parser.Value(&key,
+		flag.String("k", "ключ"),
+		env.String("KEY"),
+	)
+
+	parser.Value(&cryptoKeyPath,
+		field.String("database_dsn"),
+		flag.String("crypto-key", "путь до файла с приватным ключом"),
+		env.String("CRYPTO_KEY"),
+	)
+
+	parser.Value(&logLevel,
+		flag.String("lvl", "уровень логирования"),
+		env.String("LVL"),
+	)
+
+	if err := parser.Parse(os.Args[1:]); err != nil {
+		log.Printf("err:%v\n", err)
 
 		return
 	}
 
-	flag.Parse()
-	ctx := context.Background()
-	logger := mylog.New(mylog.SlogKey, logLevel)
-
 	cfg, err := config.New(
+		config.SetRateLimit(rateLimit),
 		config.SetAddr(addr),
 		config.SetPollInterval(pollInterval),
 		config.SetReportInterval(reportInterval),
-		config.SetRateLimit(rateLimit),
 		config.SetKey(key),
-		config.SetCryptoKeyPath(publicKeyPath),
+		config.SetConfigPath(configPath),
+		config.SetCryptoKeyPath(cryptoKeyPath),
+		config.SetLogLevel(logLevel),
 	)
-
 	if err != nil {
-		logger.Error("config new", "error", err)
+		log.Printf("new config: %v\n", err)
 
 		return
 	}
 
-	agent := agent.New(logger, cfg)
+	logger := mylog.New(mylog.SlogKey, logLevel)
 
-	if err := shutdown.New(agent, timeout).Start(ctx); err != nil {
+	if err := runAgent(cfg, logger); err != nil {
 		logger.Error("shutdown", "error", err)
 	}
+}
+
+func runAgent(cfg *config.Config, mlog *slog.Logger) error {
+	ctx := context.Background()
+
+	agent := agent.New(cfg, mlog)
+
+	return shutdown.New(agent, timeout).Start(ctx)
 }

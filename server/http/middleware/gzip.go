@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"compress/gzip"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -83,13 +82,10 @@ func Gzip(h http.HandlerFunc) http.HandlerFunc {
 		contentEncoding := req.Header.Get("Content-Encoding")
 
 		sendsGzip := strings.Contains(contentEncoding, "gzip")
-		fmt.Printf("senGzip[%v]\n", sendsGzip)
 		if sendsGzip {
 			// оборачиваем тело запроса в io.Reader с поддержкой декомпрессии
 			creq, err := newCompressReader(req.Body)
 			if err != nil {
-				// w.WriteHeader(http.StatusInternalServerError)
-				// fmt.Printf("errGzip: %v\n", err)
 				http.Error(rw, err.Error(), http.StatusInternalServerError)
 
 				return

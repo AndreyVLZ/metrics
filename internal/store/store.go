@@ -2,13 +2,13 @@ package store
 
 import (
 	"context"
-	"time"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
 	"github.com/AndreyVLZ/metrics/internal/store/adapter"
 	"github.com/AndreyVLZ/metrics/internal/store/filestore"
 	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
 	"github.com/AndreyVLZ/metrics/internal/store/postgres"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 type Storage interface {
@@ -30,14 +30,7 @@ const (
 	StorageTypeInMemory StorageType = "mem"
 )
 
-type Config struct {
-	ConnDB    string
-	StorePath string
-	IsRestore bool
-	StoreInt  time.Duration
-}
-
-func New(cfg Config) Storage {
+func New(cfg config.StorageConfig) Storage {
 	storeType := StorageTypeInMemory
 
 	if cfg.StorePath != "" {

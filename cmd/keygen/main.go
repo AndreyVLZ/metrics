@@ -5,10 +5,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/AndreyVLZ/metrics/agent"
 	"github.com/AndreyVLZ/metrics/pkg/crypto"
 	mylog "github.com/AndreyVLZ/metrics/pkg/log"
-	"github.com/AndreyVLZ/metrics/server"
 )
 
 func main() {
@@ -16,9 +14,9 @@ func main() {
 	// - 4096 max data len ~446
 	// - 5120 max data len ~574
 	size := 5120
-	publicKeyPath := agent.CryproKeyPathDefault
-	privateKeyPath := server.CryptoKeyPathDefault
-	logger := mylog.New(mylog.SlogKey, "debug")
+	publicKeyPath := "/tmp/public.pem"
+	privateKeyPath := "/tmp/private.pem"
+	logger := mylog.New(mylog.SlogKey, mylog.LevelDebug)
 
 	key, err := crypto.New(size)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/AndreyVLZ/metrics/internal/store"
+	"github.com/AndreyVLZ/metrics/server/config"
 	api "github.com/AndreyVLZ/metrics/server/http"
 	m "github.com/AndreyVLZ/metrics/server/http/middleware"
 	"github.com/AndreyVLZ/metrics/server/service"
@@ -28,27 +29,21 @@ type IService interface {
 // Сервер.
 type Server struct {
 	api      iAPI
-	cfg      *Config
+	cfg      *config.Config
 	log      *slog.Logger
 	services []IService
 }
 
-func New(cfg *Config, log *slog.Logger) Server {
-	store := store.New(
-		store.Config{
-			ConnDB:    cfg.dbDNS,
-			StorePath: cfg.storePath,
-			IsRestore: cfg.isRestore,
-			StoreInt:  cfg.storeInt,
-		},
-	)
+// New Возвращает Сервер с конфигом.
+func New(cfg *config.Config, log *slog.Logger) Server {
+	store := store.New(cfg.StorageConfig)
 
 	srv := service.New(store)
 	mux := api.NewRoute(srv, log)
 	handler := m.Logging(log,
-		m.Decrypt(cfg.privateKey,
+		m.Decrypt(cfg.PrivateKey,
 			m.Gzip(
-				m.Hash(cfg.key,
+				m.Hash(cfg.Key,
 					mux,
 				),
 			),
@@ -57,7 +52,7 @@ func New(cfg *Config, log *slog.Logger) Server {
 
 	httpServer := api.NewServer(
 		api.Config{
-			Addr: cfg.addr,
+			Addr: cfg.Addr,
 		},
 		handler,
 	)
@@ -70,17 +65,18 @@ func New(cfg *Config, log *slog.Logger) Server {
 	}
 }
 
-// Запуск сервера.
+// Start Запуск сервера.
 func (srv *Server) Start(ctx context.Context) error {
 	srv.log.DebugContext(ctx, "start server",
-		slog.String("addr", srv.cfg.addr),
+		slog.String("addr", srv.cfg.Addr),
 		slog.Group("flags",
-			slog.String("storeInterval", srv.cfg.storeInt.String()),
-			slog.String("storePath", srv.cfg.storePath),
-			slog.Bool("restore", srv.cfg.isRestore),
-			slog.String("dbDNS", srv.cfg.dbDNS),
-			slog.String("key", srv.cfg.key),
-			slog.String("privateKeyPath", srv.cfg.cryptoKeyPath),
+			slog.String("storeInterval", srv.cfg.StoreInt.String()),
+			slog.String("storePath", srv.cfg.StorePath),
+			slog.Bool("restore", srv.cfg.IsRestore),
+			slog.String("connDB", srv.cfg.ConnDB),
+			slog.String("key", srv.cfg.Key),
+			slog.String("privateKeyPath", srv.cfg.CryptoKeyPath),
+			slog.String("configPath", srv.cfg.ConfigPath),
 		),
 	)
 
@@ -95,7 +91,7 @@ func (srv *Server) Start(ctx context.Context) error {
 	return srv.api.Start()
 }
 
-// Остановка сервера.
+// Stop Остановка сервера.
 func (srv *Server) Stop(ctx context.Context) error {
 	errs := make([]error, 0, len(srv.services)+1)
 	if err := srv.api.Stop(ctx); err != nil {

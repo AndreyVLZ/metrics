@@ -81,7 +81,6 @@ func Encrypt(publicKey *rsa.PublicKey, message []byte) ([]byte, error) {
 
 // RSAPrivateKey Получает приватный ключ rsa [rsa.PrivateKey] из файла.
 func RSAPrivateKey(privateKeyPath string) (*rsa.PrivateKey, error) {
-	fmt.Printf("privateKeyPath: %v\n", privateKeyPath)
 	pkBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("open publicKey file: %w", err)

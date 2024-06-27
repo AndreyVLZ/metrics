@@ -3,10 +3,11 @@ package agent_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
-	"github.com/AndreyVLZ/metrics/pkg/log"
+	"github.com/AndreyVLZ/metrics/agent/config"
 )
 
 func ExampleNew() {
@@ -24,7 +25,9 @@ func ExampleNew() {
 	ctxStop, cancelStop := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelStop()
 
-	agent := agent.New(log.New(log.SlogKey, log.LevelErr))
+	cfg := config.Default()
+
+	agent := agent.New(cfg, slog.Default())
 
 	// Функция agent.Start неблокирующая.
 	// Ошибки при работе Агента идут в agent.Err

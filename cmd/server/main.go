@@ -1,20 +1,43 @@
 // Запускает Сервер.
-// Параметры Сервера (задаются через [falg] и/или [env]):
+// Параметры Сервера (задаются через [configPath] и/или [falg] и/или [env]):
+//   - адрес эндпоинта HTTP-сервера
+//     ["localhost:8080"] [-a] [ADDRESS]
+//   - путь до файла конфигурации
+//     [""] [-c] [CONFIG]
+//   - путь до файла с приватным ключом
+//     ["/tmp/private.pem"] [-crypto-key] [CRYPTO_KEY]
+//   - строка с адресом подключения к БД
+//     [""] [-d] [DATABASE_DSN]
+//   - полное имя файла, куда сохраняются текущие значения
+//     [""] [-f] [FILE_STORAGE_PATH]
+//   - интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск
+//     [300] [-i] [STORE_INTERVAL]
+//   - ключ
+//     [""] [-k] [KEY]
+//   - уровень логирования
+//     ["err"] [-lvl] [LVL]
+//   - определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера
+//     [true] [-r] [RESTORE]
 package main
 
 import (
 	"context"
-	"flag"
 	"log"
-	"net/http"
+	"log/slog"
 	_ "net/http/pprof"
+	"os"
 	"time"
 
-	"github.com/AndreyVLZ/metrics/pkg/flagenv"
 	mylog "github.com/AndreyVLZ/metrics/pkg/log"
+	"github.com/AndreyVLZ/metrics/pkg/parser"
+	"github.com/AndreyVLZ/metrics/pkg/parser/convert"
+	"github.com/AndreyVLZ/metrics/pkg/parser/env"
+	"github.com/AndreyVLZ/metrics/pkg/parser/field"
+	"github.com/AndreyVLZ/metrics/pkg/parser/flag"
 	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 	"github.com/AndreyVLZ/metrics/server"
 	"github.com/AndreyVLZ/metrics/server/adapter"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 const timeout time.Duration = 7
@@ -29,76 +52,106 @@ func main() {
 	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
 
 	var (
-		addr           string
-		storeInterval  int
-		storagePath    string
-		databaseDNS    string
-		isRestore      bool
-		key            string
-		logLevel       string
-		privateKeyPath string
-		configPath     string
+		addr          = config.AddressDefault
+		storeInterval = config.StoreIntervalDefault
+		storePath     = config.StorePathDefault
+		isRestore     = config.IsRestoreDefault
+		logLevel      = mylog.LevelErr
+		cryptoKeyPath = ""
+		connDB        = ""
+		configPath    = ""
+		key           = ""
 	)
 
-	if err := flagenv.New(
-		flagenv.String(&addr, "ADDRESS", "a", server.AddressDefault, "адрес эндпоинта HTTP-сервера"),
-		flagenv.Int(&storeInterval, "STORE_INTERVAL", "i", server.StoreIntervalDefault, "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск"),
-		flagenv.String(&storagePath, "FILE_STORAGE_PATH", "f", server.StoragePathDefault, "полное имя файла, куда сохраняются текущие значения"),
-		flagenv.String(&databaseDNS, "DATABASE_DSN", "d", "", "строка с адресом подключения к БД"),
-		flagenv.String(&key, "KEY", "k", "", "ключ"),
-		flagenv.Bool(&isRestore, "RESTORE", "r", server.IsRestoreDefault, "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера"),
-		flagenv.String(&privateKeyPath, "CRYPTO_KEY", "crypto-key", server.CryptoKeyPathDefault, "путь до файла с приватным ключом"),
-		flagenv.String(&configPath, "CONFIG", "c", "", "путь до файла конфигурации"),
-		flagenv.String(&logLevel, "LVL", "lvl", mylog.LevelErr, "уровень логирования"),
-	); err != nil {
-		log.Printf("flagenv: %v\n", err)
+	parser.File(&configPath,
+		flag.String("c", "путь до файла конфигурации"),
+		env.String("CONFIG"),
+	)
+
+	parser.Value(&storeInterval,
+		field.Duration("store_interval"),
+		convert.IntToDuration(time.Second,
+			flag.Int("i", "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск"),
+			env.Int("STORE_INTERVAL"),
+		),
+	)
+
+	parser.Value(&addr,
+		field.String("address"),
+		flag.String("a", "адрес эндпоинта HTTP-сервера"),
+		env.String("ADDRESS"),
+	)
+
+	parser.Value(&storePath,
+		field.String("store_file"),
+		flag.String("f", "полное имя файла, куда сохраняются текущие значения"),
+		env.String("FILE_STORAGE_PATH"),
+	)
+
+	parser.Value(&connDB,
+		field.String("database_dsn"),
+		flag.String("d", "строка с адресом подключения к БД"),
+		env.String("DATABASE_DSN"),
+	)
+
+	parser.Value(&isRestore,
+		field.Bool("restore"),
+		flag.Bool("r", "определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера"),
+		env.Bool("RESTORE"),
+	)
+
+	parser.Value(&cryptoKeyPath,
+		field.String("database_dsn"),
+		flag.String("crypto-key", "путь до файла с приватным ключом"),
+		env.String("CRYPTO_KEY"),
+	)
+
+	parser.Value(&key,
+		flag.String("k", "ключ"),
+		env.String("KEY"),
+	)
+
+	parser.Value(&logLevel,
+		flag.String("lvl", "уровень логирования"),
+		env.String("LVL"),
+	)
+
+	if err := parser.Parse(os.Args[1:]); err != nil {
+		log.Printf("err:%v\n", err)
 
 		return
 	}
 
-	flag.Parse()
+	cfg, err := config.New(
+		config.SetAddr(addr),
+		config.SetStoreInt(storeInterval),
+		config.SetStorePath(storePath),
+		config.SetRestore(isRestore),
+		config.SetCryptoKeyPath(cryptoKeyPath),
+		config.SetDatabaseDNS(connDB),
+		config.SetConfigPath(configPath),
+		config.SetKey(key),
+		config.SetLogLevel(logLevel),
+	)
 
-	opts := []server.FuncOpt{
-		server.SetAddr(addr),
-		server.SetStoreInt(storeInterval),
-		server.SetStorePath(storagePath),
-		server.SetRestore(isRestore),
-		server.SetDatabaseDNS(databaseDNS),
-		server.SetKey(key),
-		server.SetCryptoKeyPath(privateKeyPath),
-	}
-
-	ctx := context.Background()
-	logger := mylog.New(mylog.SlogKey, logLevel)
-
-	cfg, err := server.NewConfig(configPath, opts...)
 	if err != nil {
-		logger.Error("new config", "error", err)
+		log.Printf("new config: %v\n", err)
 
 		return
 	}
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	logger := mylog.New(mylog.SlogKey, cfg.LogLevel)
 
-	server := server.New(cfg, logger)
-	shutdown := shutdown.New(
-		adapter.NewShutdown(&server),
-		timeout,
-	)
-
-	if err := shutdown.Start(ctx); err != nil {
+	if err := runServer(cfg, logger); err != nil {
 		logger.Error("start server", "error", err)
 	}
 }
 
-/*
-func runServer(logger *slog.Logger, opts ...server.FuncOpt) error {
+func runServer(cfg *config.Config, mlog *slog.Logger) error {
 	ctx := context.Background()
 
-	cfg := server.NewConfig(opts...)
-	server := server.New(cfg, logger)
+	server := server.New(cfg, mlog)
+
 	shutdown := shutdown.New(
 		adapter.NewShutdown(&server),
 		timeout,
@@ -106,4 +159,9 @@ func runServer(logger *slog.Logger, opts ...server.FuncOpt) error {
 
 	return shutdown.Start(ctx)
 }
+
+/*
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 */

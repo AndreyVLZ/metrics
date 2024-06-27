@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,7 +13,6 @@ type iLogger interface {
 type responseData struct {
 	status int
 	size   int
-	errStr string
 }
 
 func newResponceData() *responseData {
@@ -27,7 +25,6 @@ func (rd *responseData) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.Int("status", rd.status),
 		slog.Int("size", rd.size),
-		slog.String("err", rd.errStr),
 	)
 }
 
@@ -58,11 +55,6 @@ func newLoggingResponseWriter(rw http.ResponseWriter, resData *responseData) *lo
 }
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
-	if r.responseData.status >= http.StatusBadRequest && r.responseData.status <= http.StatusNetworkAuthenticationRequired {
-		fmt.Printf("logErr [%v]\n", string(b))
-		r.responseData.errStr = string(b)
-	}
-
 	size, err := r.ResponseWriter.Write(b)
 	r.responseData.size += size
 
