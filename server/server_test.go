@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AndreyVLZ/metrics/pkg/log"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 func TestServerStartStop(t *testing.T) {
@@ -24,7 +25,16 @@ func TestServerStartStop(t *testing.T) {
 	defer cancelStopTimeout()
 
 	log := log.New(log.SlogKey, log.LevelErr)
-	srv := New(log, SetStorePath(""))
+
+	cfg, err := config.New(
+		config.SetStorePath(""),
+	)
+
+	if err != nil {
+		t.Errorf("new config: %v\n", err)
+	}
+
+	srv := New(cfg, log)
 
 	t.Cleanup(func() {
 		if err := srv.Stop(ctxStopTimeout); err != nil {

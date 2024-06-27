@@ -3,20 +3,28 @@ package shutdown_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"syscall"
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
-	"github.com/AndreyVLZ/metrics/pkg/log"
+	acfg "github.com/AndreyVLZ/metrics/agent/config"
 	"github.com/AndreyVLZ/metrics/pkg/shutdown"
 	"github.com/AndreyVLZ/metrics/server"
 	"github.com/AndreyVLZ/metrics/server/adapter"
+	scfg "github.com/AndreyVLZ/metrics/server/config"
 )
 
 func ExampleShutdown_agent() {
 	ctx := context.Background()
-	log := log.New(log.SlogKey, log.LevelErr)
-	agent := agent.New(log)
+
+	cfg, err := acfg.New(acfg.SetAddr("localhost:8081"))
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	agent := agent.New(cfg, slog.Default())
 	shuwdown := shutdown.New(agent, 2*time.Second)
 
 	// Имитация сигнала прерывания.
@@ -25,7 +33,13 @@ func ExampleShutdown_agent() {
 		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 	}()
 
-	if err := shuwdown.Start(ctx); err != nil {
+	signals := []os.Signal{
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	}
+
+	if err := shuwdown.Start(ctx, signals...); err != nil {
 		fmt.Println(err)
 	}
 
@@ -35,9 +49,20 @@ func ExampleShutdown_agent() {
 
 func ExampleShutdown_server() {
 	ctx := context.Background()
-	log := log.New(log.SlogKey, log.LevelErr)
-	server := server.New(log, server.SetStorePath(""))
+
+	cfg, err := scfg.New(scfg.SetAddr("localhost:8082"), scfg.SetStorePath(""))
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	server := server.New(cfg, slog.Default())
 	shuwdown := shutdown.New(adapter.NewShutdown(&server), 2*time.Second)
+
+	signals := []os.Signal{
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	}
 
 	// Имитация сигнала прерывания.
 	go func() {
@@ -45,7 +70,7 @@ func ExampleShutdown_server() {
 		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 	}()
 
-	if err := shuwdown.Start(ctx); err != nil {
+	if err := shuwdown.Start(ctx, signals...); err != nil {
 		fmt.Println(err)
 	}
 

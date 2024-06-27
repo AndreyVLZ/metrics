@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AndreyVLZ/metrics/agent"
+	"github.com/AndreyVLZ/metrics/agent/config"
 )
 
 func TestRunAgent(t *testing.T) {
@@ -19,17 +19,12 @@ func TestRunAgent(t *testing.T) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	opts := []agent.FuncOpt{
-		agent.SetPollInterval(1),
-		agent.SetReportInterval(2),
-		agent.SetRateLimit(10),
-		agent.SetKey("key"),
-	}
+	cfg := config.Default()
 
 	chErr := make(chan error)
 
 	go func() {
-		if err := runAgent(ctxTimeout, 3, slog.Default(), opts...); err != nil {
+		if err := runAgent(cfg, slog.Default()); err != nil {
 			chErr <- err
 		}
 	}()
@@ -41,6 +36,4 @@ func TestRunAgent(t *testing.T) {
 			t.Errorf("run agent err: %v", err)
 		}
 	}
-
-	t.Log("OK-3")
 }

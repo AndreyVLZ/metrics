@@ -31,3 +31,5 @@ vendor/
 
 # test cover
 coverage/ 
+
+t/

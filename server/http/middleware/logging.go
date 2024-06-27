@@ -79,6 +79,7 @@ func Logging(log iLogger, next http.Handler) http.HandlerFunc {
 
 		defer func() {
 			reqData.duration = time.Since(start)
+
 			log.Info("INFO", "response", resData, "request", reqData)
 		}()
 

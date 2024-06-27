@@ -63,6 +63,7 @@ func Hash(key string, next http.Handler) http.HandlerFunc {
 
 			if isValid, err := hash.ValidMAC(sha, bodyByte, []byte(key)); err != nil || !isValid {
 				http.Error(rw, "internal errpr", http.StatusInternalServerError)
+
 				return
 			}
 		}
