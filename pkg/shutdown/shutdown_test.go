@@ -3,6 +3,8 @@ package shutdown
 import (
 	"context"
 	"errors"
+	"os"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -36,7 +38,13 @@ func TestShutdown(t *testing.T) {
 
 		cancel()
 
-		if err := shut.Start(ctxCan); err != nil {
+		signals := []os.Signal{
+			syscall.SIGTERM,
+			syscall.SIGINT,
+			syscall.SIGQUIT,
+		}
+
+		if err := shut.Start(ctxCan, signals...); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				t.Errorf("errs [%v]!=[%v]\n", err, context.Canceled)
 			}
@@ -52,7 +60,13 @@ func TestShutdown(t *testing.T) {
 
 		cancel()
 
-		if err := shutdown.Start(ctxCan); err != nil {
+		signals := []os.Signal{
+			syscall.SIGTERM,
+			syscall.SIGINT,
+			syscall.SIGQUIT,
+		}
+
+		if err := shutdown.Start(ctxCan, signals...); err != nil {
 			if !errors.Is(err, errCheck) {
 				t.Errorf("errs [%v]!=[%v]\n", err, errCheck)
 			}
@@ -68,8 +82,13 @@ func TestShutdown(t *testing.T) {
 		shutdown := New(&fs, time.Second)
 
 		cancel()
+		signals := []os.Signal{
+			syscall.SIGTERM,
+			syscall.SIGINT,
+			syscall.SIGQUIT,
+		}
 
-		if err := shutdown.Start(ctxCan); err != nil {
+		if err := shutdown.Start(ctxCan, signals...); err != nil {
 			if !errors.Is(err, errCheck) {
 				t.Errorf("errs [%v]!=[%v]\n", err, errCheck)
 			}
@@ -84,7 +103,13 @@ func TestShutdown(t *testing.T) {
 		fs := fakeStarter{chErr: make(chan error, 1), errRun: errCheck}
 		shutdown := New(&fs, time.Second)
 
-		if err := shutdown.Start(ctxCan); err != nil {
+		signals := []os.Signal{
+			syscall.SIGTERM,
+			syscall.SIGINT,
+			syscall.SIGQUIT,
+		}
+
+		if err := shutdown.Start(ctxCan, signals...); err != nil {
 			if !errors.Is(err, errCheck) {
 				t.Errorf("errs [%v]!=[%v]\n", err, errCheck)
 			}

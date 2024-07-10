@@ -8,6 +8,7 @@ import (
 	"github.com/AndreyVLZ/metrics/internal/store/filestore"
 	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
 	"github.com/AndreyVLZ/metrics/internal/store/postgres"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 type Storage interface {
@@ -29,14 +30,7 @@ const (
 	StorageTypeInMemory StorageType = "mem"
 )
 
-type Config struct {
-	ConnDB    string
-	StorePath string
-	IsRestore bool
-	StoreInt  int
-}
-
-func New(cfg Config) Storage {
+func New(cfg config.StorageConfig) Storage {
 	storeType := StorageTypeInMemory
 
 	if cfg.StorePath != "" {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AndreyVLZ/metrics/agent"
+	"github.com/AndreyVLZ/metrics/agent/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +34,6 @@ func TestStartStop(t *testing.T) {
 		defer func() {
 			exit <- struct{}{}
 		}()
-
 		assert.Equal(t, wantEndpoint, req.URL.String())
 
 		body := req.Body
@@ -50,14 +50,17 @@ func TestStartStop(t *testing.T) {
 	}))
 	defer tsrv.Close()
 
-	opts := []agent.FuncOpt{
-		agent.SetAddr(strings.TrimPrefix(tsrv.URL, "http://")),
-		agent.SetPollInterval(1),
-		agent.SetReportInterval(1),
-		agent.SetRateLimit(4),
+	cfg, err := config.New(
+		config.SetAddr(strings.TrimPrefix(tsrv.URL, "http://")),
+		config.SetPollInterval(1*time.Second),
+		config.SetReportInterval(1*time.Second),
+		config.SetRateLimit(4),
+	)
+	if err != nil {
+		t.Errorf("new config: %v\n", err)
 	}
 
-	agent := agent.New(slog.Default(), opts...)
+	agent := agent.New(cfg, slog.Default())
 
 	if err := agent.Start(ctxStart); err != nil {
 		t.Errorf("start agent err: %v\n", err)

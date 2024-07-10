@@ -7,6 +7,7 @@ import (
 
 	"github.com/AndreyVLZ/metrics/pkg/log"
 	"github.com/AndreyVLZ/metrics/server"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 func ExampleNew() {
@@ -17,7 +18,16 @@ func ExampleNew() {
 	defer cancelStop()
 
 	log := log.New(log.SlogKey, log.LevelErr)
-	srv := server.New(log, server.SetStorePath(""))
+
+	cfg, err := config.New(
+		config.SetStorePath(""),
+	)
+
+	if err != nil {
+		log.Error("new config", "err", err)
+	}
+
+	srv := server.New(cfg, log)
 
 	chErr := make(chan error)
 	go func() {
