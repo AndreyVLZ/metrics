@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -193,6 +194,12 @@ func (a *Agent) sendBatch(ctx context.Context, arr []model.Metric) error {
 		}
 
 		header.Set("Content-Type", "application/json")
+		clientIP, err := getIP()
+		if err != nil {
+			return err
+		}
+		header.Set("X-Real-IP", clientIP.String())
+
 		req.Header = header
 
 		return a.do(req)
@@ -365,4 +372,22 @@ func runWorkerPool(rateLimit int, jobc <-chan []model.Metric, fnSend func([]mode
 	}()
 
 	return errc
+}
+
+func getIP() (net.IP, error) {
+	addrs, err := net.LookupHost("localhost")
+	if err != nil {
+		return nil, fmt.Errorf("lookupHost: %w", err)
+	}
+
+	if len(addrs) == 0 {
+		return nil, errors.New("no find addrs")
+	}
+
+	netIP := net.ParseIP(addrs[0])
+	if netIP == nil {
+		return nil, fmt.Errorf("parse IP [%s]: %w", addrs[0], err)
+	}
+
+	return netIP, nil
 }
