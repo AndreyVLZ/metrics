@@ -41,10 +41,12 @@ func New(cfg *config.Config, log *slog.Logger) Server {
 	srv := service.New(store)
 	mux := api.NewRoute(srv, log)
 	handler := m.Logging(log,
-		m.Decrypt(cfg.PrivateKey,
-			m.Gzip(
-				m.Hash(cfg.Key,
-					mux,
+		m.Subnet(cfg.TrustedSubnet,
+			m.Decrypt(cfg.PrivateKey,
+				m.Gzip(
+					m.Hash(cfg.Key,
+						mux,
+					),
 				),
 			),
 		),
@@ -77,6 +79,7 @@ func (srv *Server) Start(ctx context.Context) error {
 			slog.String("key", srv.cfg.Key),
 			slog.String("privateKeyPath", srv.cfg.CryptoKeyPath),
 			slog.String("configPath", srv.cfg.ConfigPath),
+			slog.String("subnet", srv.cfg.TrustedSubnet.String()),
 		),
 	)
 
