@@ -20,6 +20,7 @@ const (
 	StoreIntervalDefault time.Duration = 300 * time.Second      // Значение по умолчанию для интервала времени в секундах, по истечении которого текущие показания сервера сохраняются на диск.
 	IsRestoreDefault     bool          = true                   // Значение по умолчанию для значения определяющее, загружать или нет ранее сохранённые значения из указанного файла при старте сервера.
 	LogLevelDefault      string        = log.LevelErr           // Значение по умолчанию для уровня логирования.
+	AddressGRPCDefault   string        = ":3200"                // Значение по умолчанию для адреса grpc.
 )
 
 // FuncOpt Опции для конфига.
@@ -42,6 +43,7 @@ type Config struct {
 	LogLevel      string
 	ConfigPath    string
 	TrustedSubnet net.IP
+	AddrGRPC      string
 	StorageConfig
 }
 
@@ -49,6 +51,7 @@ func Default() *Config {
 	return &Config{
 		Addr:     AddressDefault,
 		LogLevel: LogLevelDefault,
+		AddrGRPC: AddressGRPCDefault,
 		StorageConfig: StorageConfig{
 			StorePath: StorePathDefault,
 			StoreInt:  StoreIntervalDefault,
@@ -57,7 +60,10 @@ func Default() *Config {
 	}
 }
 
-// New ...
+// New Новый конфиг прочитанный:
+// - из файла (ConfigPath передается из флага -с)
+// - из переданных флагов [args]
+// - из ENV.
 func New(args []string) (*Config, error) {
 	cfg := Default()
 
@@ -103,10 +109,10 @@ func (c *Config) SetOpts(opts ...FuncOpt) {
 // fromFlag Опции для конфига из флагов.
 func (c *Config) fromFlag(args []string) ([]FuncOpt, error) {
 	flagOpts := make([]FuncOpt, 0)
-
-	fs := flag.NewFlagSet(args[0], flag.ExitOnError)
+	fs := flag.NewFlagSet("server flag", flag.ExitOnError)
 
 	fs.StringVar(&c.ConfigPath, "c", "", "путь до файла конфигурации")
+	fs.StringVar(&c.AddrGRPC, "ag", c.AddrGRPC, "адрес grpc")
 	fs.Func("i", "интервал времени в секундах, по истечении которого текущие показания сервера сохраняются на диск", func(flagStoreIntervalStr string) error {
 		storeInterval, err := time.ParseDuration(flagStoreIntervalStr)
 		if err != nil {
@@ -164,7 +170,7 @@ func (c *Config) fromFlag(args []string) ([]FuncOpt, error) {
 		return nil
 	})
 
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("parse flags: %w", err)
 	}
 
@@ -208,12 +214,12 @@ func (c *Config) fromENV() ([]FuncOpt, error) {
 
 	storeIntStr, isExist := os.LookupEnv("STORE_INTERVAL")
 	if isExist {
-		storeIntENV, err := time.ParseDuration(storeIntStr)
+		storeIntENV, err := strconv.Atoi(storeIntStr)
 		if err != nil {
 			return nil, fmt.Errorf("parse env STORE_INTERVAL: %w", err)
 		}
 
-		opts = append(opts, SetStoreInt(storeIntENV))
+		opts = append(opts, SetStoreInt(time.Duration(storeIntENV)*time.Second))
 	}
 
 	fileStoragePathENV, isExist := os.LookupEnv("FILE_STORAGE_PATH")
@@ -371,5 +377,12 @@ func SetLogLevel(logLevel string) FuncOpt {
 func SetTrustedSubnet(trustedSubnet net.IP) FuncOpt {
 	return func(cfg *Config) {
 		cfg.TrustedSubnet = trustedSubnet
+	}
+}
+
+// GRPC
+func SetAddGRPC(addr string) FuncOpt {
+	return func(cfg *Config) {
+		cfg.AddrGRPC = addr
 	}
 }

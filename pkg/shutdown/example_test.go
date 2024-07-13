@@ -19,10 +19,11 @@ import (
 func ExampleShutdown_agent() {
 	ctx := context.Background()
 
-	cfg, err := acfg.New(acfg.SetAddr("localhost:8081"))
-	if err != nil {
-		fmt.Println(err)
-	}
+	cfg := acfg.Default()
+	cfg.SetOpts(
+		acfg.SetAddr("localhost:8081"),
+		acfg.SetAddGRPC(":3201"),
+	)
 
 	agent := agent.New(cfg, slog.Default())
 	shuwdown := shutdown.New(agent, 2*time.Second)
@@ -50,10 +51,11 @@ func ExampleShutdown_agent() {
 func ExampleShutdown_server() {
 	ctx := context.Background()
 
-	cfg, err := scfg.New(scfg.SetAddr("localhost:8082"), scfg.SetStorePath(""))
-	if err != nil {
-		fmt.Println(err)
-	}
+	cfg := scfg.Default()
+	cfg.SetOpts(
+		scfg.SetAddr("localhost:8082"),
+		scfg.SetAddGRPC(":3202"),
+	)
 
 	server := server.New(cfg, slog.Default())
 	shuwdown := shutdown.New(adapter.NewShutdown(&server), 2*time.Second)

@@ -19,6 +19,7 @@ var (
 	RateLimitDefault      int           = 3                // Значение по умолчания для количества одновременно исходящих запросов на сервер.
 	PollIntervalDefault   time.Duration = 2 * time.Second  // Значение по умолчания для частоты опроса метрик из пакета runtime.
 	ReportIntervalDefault time.Duration = 10 * time.Second // Значение по умолчания для частоты отправки метрик на сервер.
+	AddressGRPCDefault    string        = ":3200"          // Значение по умолчанию для адреса grpc.
 )
 
 // Опции для конфига.
@@ -35,6 +36,7 @@ type Config struct {
 	Key            []byte
 	PublicKey      *rsa.PublicKey
 	LogLevel       string
+	AddrGRPC       string
 }
 
 func Default() *Config {
@@ -44,10 +46,14 @@ func Default() *Config {
 		ReportInterval: ReportIntervalDefault,
 		RateLimit:      RateLimitDefault,
 		LogLevel:       LogLevelDefault,
+		AddrGRPC:       AddressGRPCDefault,
 	}
 }
 
-// New ...
+// New Новый конфиг прочитанный:
+// - из файла (ConfigPath передается из флага -с)
+// - из переданных флагов [args]
+// - из ENV.
 func New(args []string) (*Config, error) {
 	cfg := Default()
 
@@ -93,26 +99,27 @@ func (c *Config) SetOpts(opts ...FuncOpt) {
 func (c *Config) fromFlag(args []string) ([]FuncOpt, error) {
 	flagOpts := make([]FuncOpt, 0)
 
-	fs := flag.NewFlagSet(args[0], flag.ExitOnError)
+	fs := flag.NewFlagSet("agent-flag", flag.ExitOnError)
 
 	fs.StringVar(&c.ConfigPath, "c", "", "путь до файла конфигурации")
+	fs.StringVar(&c.AddrGRPC, "ag", c.AddrGRPC, "адрес grpc")
 	fs.Func("p", "частота опроса метрик из пакета runtime", func(flagPollStr string) error {
-		poll, err := time.ParseDuration(flagPollStr)
+		poll, err := strconv.Atoi(flagPollStr)
 		if err != nil {
-			return fmt.Errorf("parse poll interval: %w", err)
+			return fmt.Errorf("parse [%s] to poll interval: %w", flagPollStr, err)
 		}
 
-		flagOpts = append(flagOpts, SetPollInterval(poll))
+		flagOpts = append(flagOpts, SetPollInterval(time.Duration(poll)*time.Second))
 
 		return nil
 	})
 	fs.Func("r", "частота отправки метрик на сервер", func(flagReportStr string) error {
-		report, err := time.ParseDuration(flagReportStr)
+		report, err := strconv.Atoi(flagReportStr)
 		if err != nil {
-			return fmt.Errorf("parse report interval: %w", err)
+			return fmt.Errorf("convert [%s] to report interval: %w", flagReportStr, err)
 		}
 
-		flagOpts = append(flagOpts, SetReportInterval(report))
+		flagOpts = append(flagOpts, SetReportInterval(time.Duration(report)*time.Second))
 
 		return nil
 	})
@@ -147,7 +154,7 @@ func (c *Config) fromFlag(args []string) ([]FuncOpt, error) {
 		return nil
 	})
 
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("parse flags: %w", err)
 	}
 
@@ -323,5 +330,12 @@ func SetLogLevel(lvl string) FuncOpt {
 func SetConfigPath(configPath string) FuncOpt {
 	return func(cfg *Config) {
 		cfg.ConfigPath = configPath
+	}
+}
+
+// GRPC
+func SetAddGRPC(addr string) FuncOpt {
+	return func(cfg *Config) {
+		cfg.AddrGRPC = addr
 	}
 }

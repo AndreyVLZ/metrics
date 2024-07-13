@@ -76,17 +76,15 @@ func (fs *FileStore) Start(ctx context.Context) error {
 	}
 
 	if fs.cfg.StoreInt == 0 {
+		// run as synchro
 		fs.storage = newWrapStore(fs.file, fs.storage)
-
-		fmt.Printf("run as synchro\n")
 
 		return nil
 	}
 
 	fs.isDeamon = true
+	// run as deamon
 	go fs.run(ctx)
-
-	fmt.Printf("run as deamon\n")
 
 	return nil
 }

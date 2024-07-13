@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"github.com/AndreyVLZ/metrics/internal/model"
-	"github.com/AndreyVLZ/metrics/server/http/handler"
-	m "github.com/AndreyVLZ/metrics/server/http/middleware"
+	"github.com/AndreyVLZ/metrics/server/api/http/handler"
+	m "github.com/AndreyVLZ/metrics/server/api/http/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,7 +31,7 @@ const tpls = `{{define "List"}}
 </html>{{end}}`
 
 // Интерфейс service.
-type service interface {
+type iService interface {
 	Ping() error
 	Update(ctx context.Context, metJSON model.MetricJSON) (model.MetricJSON, error)
 	Get(ctx context.Context, metInfo model.Info) (model.MetricJSON, error)
@@ -39,12 +39,12 @@ type service interface {
 	AddBatch(ctx context.Context, arr []model.MetricJSON) error
 }
 
-func NewRoute(srv service, log *slog.Logger) http.Handler {
+func NewRoute(srv iService, log *slog.Logger) http.Handler {
 	return initChiRouter(srv, log)
 }
 
 // Инициализация chi роутера.
-func initChiRouter(srv service, log *slog.Logger) *chi.Mux {
+func initChiRouter(srv iService, log *slog.Logger) *chi.Mux {
 	const (
 		typeChiConst  = "typeStr"
 		nameChiConst  = "name"

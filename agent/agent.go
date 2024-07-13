@@ -8,36 +8,31 @@
 package agent
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/rsa"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"sync"
 	"time"
 
+	"github.com/AndreyVLZ/metrics/agent/client"
 	"github.com/AndreyVLZ/metrics/agent/config"
 	"github.com/AndreyVLZ/metrics/agent/pkg/task"
 	"github.com/AndreyVLZ/metrics/agent/stats"
 	"github.com/AndreyVLZ/metrics/internal/model"
 	"github.com/AndreyVLZ/metrics/internal/store/inmemory"
-	"github.com/AndreyVLZ/metrics/pkg/crypto"
-	"github.com/AndreyVLZ/metrics/pkg/hash"
 )
 
 const (
-	urlFormat             = "http://%s/updates/" // Эндпоинт для отправки метрик.
-	countTask             = 3                    // Кол-во задач для Агента.
-	attemptConst          = 3                    // Кол-во повторов отправки при ошибки.
-	durationTaskConst     = 2                    // Таймаут опроса метрик из пакета goutils.
-	retryTimeoutStepConst = 2                    // Шаг увелечения таймаута для повторной отправки.
+	countTask             = 3 // Кол-во задач для Агента.
+	attemptConst          = 3 // Кол-во повторов отправки при ошибки.
+	durationTaskConst     = 2 // Таймаут опроса метрик из пакета goutils.
+	retryTimeoutStepConst = 2 // Шаг увелечения таймаута для повторной отправки.
 )
+
+type iClient interface {
+	Prepare(arr []model.Metric) (func(context.Context) error, error)
+}
 
 // iStats Интерфейс статистики.
 type iStats interface {
@@ -56,13 +51,12 @@ type storage interface {
 
 // Агент.
 type Agent struct {
-	stats     iStats
-	store     storage
-	cfg       *config.Config
-	client    *http.Client
-	log       *slog.Logger
-	chErr     chan error
-	urlToSend string
+	stats  iStats
+	store  storage
+	cfg    *config.Config
+	client iClient
+	log    *slog.Logger
+	chErr  chan error
 }
 
 // Новый Агент.
@@ -70,18 +64,12 @@ func New(cfg *config.Config, log *slog.Logger) *Agent {
 	store := inmemory.New()
 
 	return &Agent{
-		cfg:       cfg,
-		stats:     stats.New(),
-		store:     store,
-		urlToSend: fmt.Sprintf(urlFormat, cfg.Addr),
-		client: &http.Client{
-			Transport: &loggingRoundTripper{
-				log:  log,
-				next: http.DefaultTransport,
-			},
-		},
-		log:   log,
-		chErr: make(chan error),
+		cfg:    cfg,
+		stats:  stats.New(),
+		store:  store,
+		log:    log,
+		chErr:  make(chan error),
+		client: client.New(cfg, log),
 	}
 }
 
@@ -117,6 +105,7 @@ func (a *Agent) Start(ctx context.Context) error {
 			slog.Int("rateLimit", a.cfg.RateLimit),
 			slog.String("key", string(a.cfg.Key)),
 			slog.String("lvl", a.cfg.LogLevel),
+			slog.String("addr GRPC", a.cfg.AddrGRPC),
 		),
 	)
 
@@ -157,58 +146,22 @@ func (a *Agent) start(ctx context.Context) {
 
 // sendBatch Отправка метрик.
 func (a *Agent) sendBatch(ctx context.Context, arr []model.Metric) error {
-	var header http.Header = make(map[string][]string)
-
-	data, err := json.Marshal(model.BuildArrMetricJSON(arr))
+	fnSend, err := a.client.Prepare(arr)
 	if err != nil {
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("prepare data: %w", err)
 	}
 
-	// хeшируем данные
-	sum, err := hashed(a.cfg.Key, data)
-	if err != nil {
-		return fmt.Errorf("req hashed: %w", err)
-	}
-
-	header.Set("HashSHA256", hex.EncodeToString(sum))
-
-	// сжимаем данные
-	dataCompress, err := gzipCompres(data)
-	if err != nil {
-		return fmt.Errorf("req compress: %w", err)
-	}
-
-	header.Set("Content-Encoding", "gzip")
-
-	// шифруем данные
-	dataEncrypt, err := encrypt(a.cfg.PublicKey, dataCompress)
-	if err != nil {
-		return fmt.Errorf("req crypto: %w", err)
-	}
-
-	return retry(ctx, attemptConst, time.Second, a.log, func() error {
-		// собираем запрос
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.urlToSend, bytes.NewReader(dataEncrypt))
-		if err != nil {
-			return fmt.Errorf("build request: %w", err)
-		}
-
-		header.Set("Content-Type", "application/json")
-		clientIP, err := getIP()
-		if err != nil {
-			return err
-		}
-		header.Set("X-Real-IP", clientIP.String())
-
-		req.Header = header
-
-		return a.do(req)
-	})
+	return retry(ctx, attemptConst, time.Second, a.log, fnSend)
 }
 
 // Повторный вызов функции fnSend attempts раз.
 // Возвращает ошибку с кол-вом вызовов функции и самой ошибкой fnSend.
-func retry(ctx context.Context, attempts int, sleep time.Duration, log *slog.Logger, fnSend func() error) error {
+func retry(ctx context.Context,
+	attempts int,
+	sleep time.Duration,
+	log *slog.Logger,
+	fnSend func(context.Context) error,
+) error {
 	var err error
 
 	for i := 0; i <= attempts; i++ {
@@ -228,73 +181,13 @@ func retry(ctx context.Context, attempts int, sleep time.Duration, log *slog.Log
 			}
 		}
 
-		err = fnSend()
+		err = fnSend(ctx)
 		if err == nil {
 			return nil
 		}
 	}
 
 	return fmt.Errorf("попыток %d, error: %w", attempts, err)
-}
-
-// hashed Возвращает хеш.
-func hashed(key, data []byte) ([]byte, error) {
-	if len(key) == 0 {
-		return data, nil
-	}
-
-	sum, err := hash.SHA256(data, key)
-	if err != nil {
-		return nil, fmt.Errorf("hash: %w", err)
-	}
-
-	return sum, nil
-}
-
-// gzipCompres Сжимает данные.
-func gzipCompres(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	gzipWriter := gzip.NewWriter(&buf)
-
-	if _, err := gzipWriter.Write(data); err != nil {
-		return nil, fmt.Errorf("gzip write: %w", err)
-	}
-
-	if err := gzipWriter.Close(); err != nil {
-		return nil, fmt.Errorf("gzip close: %w", err)
-	}
-
-	return buf.Bytes(), nil
-}
-
-// encrypt Шифрует данные публичным ключом.
-func encrypt(publicKey *rsa.PublicKey, data []byte) ([]byte, error) {
-	if publicKey == nil {
-		return data, nil
-	}
-
-	cipher, err := crypto.Encrypt(publicKey, data)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt len[%d] :%w", len(data), err)
-	}
-
-	return cipher, nil
-}
-
-// do Выполняет запрос.
-func (a *Agent) do(req *http.Request) error {
-	// выполняем запрос
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("err to send request: %w", err)
-	}
-
-	// закрывает тело ответа
-	if err = resp.Body.Close(); err != nil {
-		return fmt.Errorf("err body close: %w", err)
-	}
-
-	return nil
 }
 
 // runTaskPoll Запуск пула задач Агента.
@@ -338,6 +231,7 @@ func (a *Agent) runTaskPoll(ctx context.Context) <-chan []model.Metric {
 			cancel() // при ошибке отменяем контекст для taskPoll
 			a.chErr <- err
 		}
+
 		close(chList)
 	}()
 
@@ -372,22 +266,4 @@ func runWorkerPool(rateLimit int, jobc <-chan []model.Metric, fnSend func([]mode
 	}()
 
 	return errc
-}
-
-func getIP() (net.IP, error) {
-	addrs, err := net.LookupHost("localhost")
-	if err != nil {
-		return nil, fmt.Errorf("lookupHost: %w", err)
-	}
-
-	if len(addrs) == 0 {
-		return nil, errors.New("no find addrs")
-	}
-
-	netIP := net.ParseIP(addrs[0])
-	if netIP == nil {
-		return nil, fmt.Errorf("parse IP [%s]: %w", addrs[0], err)
-	}
-
-	return netIP, nil
 }

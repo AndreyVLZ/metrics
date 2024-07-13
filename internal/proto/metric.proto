@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package mymetric;
+
+option go_package = "internal/proto";
+
+message Info {
+	string name = 1;	// имя метрики
+	enum Type {			// перечисление тип метрик
+		COUNTER = 0;	// counter
+		GAUGE = 1;		// gauge
+	}
+	Type type = 2;		// тип метрики
+}
+
+message Metric {
+	Info info = 1;		// инфо метрики
+	int64 delta = 2;	// counter
+	double value = 3;	// value
+}
+
+// Добавление списка метрик [запрос].
+message AddBatchRequest {
+	repeated Metric arr = 1;		// список метрик
+}
+
+// Добавление списка метрик [ответ].
+message AddBatchResponse {
+	string error = 1;	// ошибка
+}
+
+service Metrics {
+	rpc AddBatch(AddBatchRequest) returns (AddBatchResponse); 
+}

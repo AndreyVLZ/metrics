@@ -44,7 +44,7 @@ func main() {
 
 	ctx := context.Background()
 
-	cfg, err := config.New(os.Args)
+	cfg, err := config.New(os.Args[1:])
 	if err != nil {
 		log.Printf("new config: %v\n", err)
 	}

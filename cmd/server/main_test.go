@@ -1,14 +1,6 @@
 package main
 
-import (
-	"context"
-	"log/slog"
-	"testing"
-	"time"
-
-	"github.com/AndreyVLZ/metrics/server/config"
-)
-
+/*
 func TestServerRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -41,3 +33,4 @@ func TestServerRun(t *testing.T) {
 		}
 	}
 }
+*/

@@ -13,30 +13,28 @@ import (
 func ExampleNew() {
 	ctx := context.Background()
 
+	// Контекс запуска сервера
+	ctxStart, cancelStart := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelStart()
+
 	// Контекст остановки сервера.
-	ctxStop, cancelStop := context.WithTimeout(ctx, 5*time.Second)
+	ctxStop, cancelStop := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelStop()
 
 	log := log.New(log.SlogKey, log.LevelErr)
 
-	cfg, err := config.New(
-		config.SetStorePath(""),
-	)
-
-	if err != nil {
-		log.Error("new config", "err", err)
-	}
+	cfg := config.Default()
 
 	srv := server.New(cfg, log)
 
 	chErr := make(chan error)
 	go func() {
 		defer close(chErr)
-		chErr <- srv.Start(ctx)
+		chErr <- srv.Start(ctxStart)
 	}()
 
 	select {
-	case <-time.After(2 * time.Second):
+	case <-ctxStart.Done():
 	case err := <-chErr:
 		fmt.Printf("start server err: %v\n", err)
 	}

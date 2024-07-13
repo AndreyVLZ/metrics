@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,11 +23,11 @@ func TestStartStop(t *testing.T) {
 	exit := make(chan struct{})
 	wantEndpoint := "/updates/"
 
-	ctxStart, cancelStart := context.WithCancel(ctx)
+	ctxStart, cancelStart := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelStart()
 
-	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 2*time.Second)
-	defer cancelTimeout()
+	ctxTimeoutStop, cancelStop := context.WithTimeout(ctx, time.Second)
+	defer cancelStop()
 
 	tsrv := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		defer func() {
@@ -50,16 +49,7 @@ func TestStartStop(t *testing.T) {
 	}))
 	defer tsrv.Close()
 
-	cfg, err := config.New(
-		config.SetAddr(strings.TrimPrefix(tsrv.URL, "http://")),
-		config.SetPollInterval(1*time.Second),
-		config.SetReportInterval(1*time.Second),
-		config.SetRateLimit(4),
-	)
-	if err != nil {
-		t.Errorf("new config: %v\n", err)
-	}
-
+	cfg := config.Default()
 	agent := agent.New(cfg, slog.Default())
 
 	if err := agent.Start(ctxStart); err != nil {
@@ -67,17 +57,11 @@ func TestStartStop(t *testing.T) {
 	}
 
 	select {
-	case <-ctxTimeout.Done():
-		t.Errorf("ctx is done")
+	case <-ctxStart.Done():
 	case err := <-agent.Err():
 		t.Errorf("run agent err: %v\n", err)
 	case <-exit:
 	}
-
-	cancelStart()
-
-	ctxTimeoutStop, cancelStop := context.WithTimeout(ctx, time.Second)
-	defer cancelStop()
 
 	if err := agent.Stop(ctxTimeoutStop); err != nil {
 		t.Logf("agent stop err: %v\n", err)

@@ -23,6 +23,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"syscall"
@@ -46,7 +47,7 @@ var (
 func main() {
 	log.Printf("\nBuild version: %s\nBuild date: %s\nBuild commit: %s\n", buildVersion, buildDate, buildCommit)
 
-	cfg, err := config.New(os.Args)
+	cfg, err := config.New(os.Args[1:])
 	if err != nil {
 		log.Printf("new config: %v\n", err)
 
@@ -55,21 +56,16 @@ func main() {
 
 	ctx := context.Background()
 	logger := mylog.New(mylog.SlogKey, cfg.LogLevel)
+
+	go func() {
+		logger.ErrorContext(ctx, "pprof", "err", http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	server := server.New(cfg, logger)
 	shutdown := shutdown.New(adapter.NewShutdown(&server), timeout)
-	signals := []os.Signal{
-		syscall.SIGTERM,
-		syscall.SIGINT,
-		syscall.SIGQUIT,
-	}
+	signals := []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT}
 
 	if err := shutdown.Start(ctx, signals...); err != nil {
-		logger.Error("start server", "error", err)
+		logger.ErrorContext(ctx, "start server", "error", err)
 	}
 }
-
-/*
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-*/
