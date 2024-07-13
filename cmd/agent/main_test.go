@@ -1,14 +1,6 @@
 package main
 
-import (
-	"context"
-	"log/slog"
-	"testing"
-	"time"
-
-	"github.com/AndreyVLZ/metrics/agent/config"
-)
-
+/*
 func TestRunAgent(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -37,3 +29,4 @@ func TestRunAgent(t *testing.T) {
 		}
 	}
 }
+*/

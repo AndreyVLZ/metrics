@@ -3,9 +3,13 @@ package http
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/AndreyVLZ/metrics/internal/store"
+	"github.com/AndreyVLZ/metrics/server/config"
 )
 
 func TestHTTPServer(t *testing.T) {
@@ -13,9 +17,15 @@ func TestHTTPServer(t *testing.T) {
 		t.Skip()
 	}
 
-	cfg := Config{Addr: "localhost:8081"}
-	h := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
-	srv := NewServer(cfg, h)
+	cfg := config.Config{
+		Addr: "localhost:8081",
+		StorageConfig: config.StorageConfig{
+			StorePath: "",
+		},
+	}
+
+	// h := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
+	srv := NewServer(&cfg, store.New(cfg.StorageConfig), slog.Default())
 
 	go func() {
 		if err := srv.Start(); err != nil && !errors.Is(http.ErrServerClosed, err) {

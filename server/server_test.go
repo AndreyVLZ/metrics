@@ -21,18 +21,12 @@ func TestServerStartStop(t *testing.T) {
 	defer cancelTimeout()
 
 	// Контекст остановки сервера.
-	ctxStopTimeout, cancelStopTimeout := context.WithTimeout(ctx, 5*time.Second)
+	ctxStopTimeout, cancelStopTimeout := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelStopTimeout()
 
 	log := log.New(log.SlogKey, log.LevelErr)
 
-	cfg, err := config.New(
-		config.SetStorePath(""),
-	)
-
-	if err != nil {
-		t.Errorf("new config: %v\n", err)
-	}
+	cfg := config.Default()
 
 	srv := New(cfg, log)
 
@@ -46,7 +40,7 @@ func TestServerStartStop(t *testing.T) {
 	go func() {
 		defer close(chErr)
 
-		if err := srv.Start(ctx); err != nil {
+		if err := srv.Start(ctxTimeout); err != nil {
 			chErr <- err
 		}
 	}()

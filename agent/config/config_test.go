@@ -63,12 +63,11 @@ func TestNewConfig(t *testing.T) {
 
 	for _, test := range tc {
 		t.Run(test.name, func(t *testing.T) {
-			cfg, err := New(test.fnOpt)
-			if err != nil {
-				t.Errorf("new config: %v\n", err)
-			}
+			var cfg Config
 
-			if !test.fnCheck(*cfg) {
+			test.fnOpt(&cfg)
+
+			if !test.fnCheck(cfg) {
 				t.Fatalf("config %v\n", cfg)
 			}
 		})

@@ -7,13 +7,11 @@ import (
 	"log/slog"
 
 	"github.com/AndreyVLZ/metrics/internal/store"
+	"github.com/AndreyVLZ/metrics/server/api"
 	"github.com/AndreyVLZ/metrics/server/config"
-	api "github.com/AndreyVLZ/metrics/server/http"
-	m "github.com/AndreyVLZ/metrics/server/http/middleware"
-	"github.com/AndreyVLZ/metrics/server/service"
 )
 
-// Интерфейс для http.Server.
+// Интерфейс для server.
 type iAPI interface {
 	Start() error
 	Stop(ctx context.Context) error
@@ -37,29 +35,11 @@ type Server struct {
 // New Возвращает Сервер с конфигом.
 func New(cfg *config.Config, log *slog.Logger) Server {
 	store := store.New(cfg.StorageConfig)
-
-	srv := service.New(store)
-	mux := api.NewRoute(srv, log)
-	handler := m.Logging(log,
-		m.Decrypt(cfg.PrivateKey,
-			m.Gzip(
-				m.Hash(cfg.Key,
-					mux,
-				),
-			),
-		),
-	)
-
-	httpServer := api.NewServer(
-		api.Config{
-			Addr: cfg.Addr,
-		},
-		handler,
-	)
+	server := api.New(cfg, store, log)
 
 	return Server{
 		cfg:      cfg,
-		api:      httpServer,
+		api:      server,
 		services: []IService{store},
 		log:      log,
 	}
@@ -77,6 +57,8 @@ func (srv *Server) Start(ctx context.Context) error {
 			slog.String("key", srv.cfg.Key),
 			slog.String("privateKeyPath", srv.cfg.CryptoKeyPath),
 			slog.String("configPath", srv.cfg.ConfigPath),
+			slog.String("subnet", srv.cfg.TrustedSubnet.String()),
+			slog.String("addr GRPC", srv.cfg.AddrGRPC),
 		),
 	)
 
@@ -94,6 +76,7 @@ func (srv *Server) Start(ctx context.Context) error {
 // Stop Остановка сервера.
 func (srv *Server) Stop(ctx context.Context) error {
 	errs := make([]error, 0, len(srv.services)+1)
+
 	if err := srv.api.Stop(ctx); err != nil {
 		errs = append(errs, err)
 	}

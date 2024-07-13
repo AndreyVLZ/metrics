@@ -40,7 +40,7 @@ func TestNewConfig(t *testing.T) {
 		},
 		{
 			name:  "setDatabaseDNS",
-			fnOpt: SetDatabaseDNS("databaseDNS"),
+			fnOpt: SetDatabaseDSN("databaseDNS"),
 			fnCheck: func(cfg Config) bool {
 				return cfg.ConnDB == "databaseDNS"
 			},
@@ -77,12 +77,11 @@ func TestNewConfig(t *testing.T) {
 
 	for _, test := range tc {
 		t.Run(test.name, func(t *testing.T) {
-			cfg, err := New(test.fnOpt)
-			if err != nil {
-				t.Error(err)
-			}
+			var cfg Config
 
-			if !test.fnCheck(*cfg) {
+			test.fnOpt(&cfg)
+
+			if !test.fnCheck(cfg) {
 				t.Fatalf("config %v\n", cfg)
 			}
 		})

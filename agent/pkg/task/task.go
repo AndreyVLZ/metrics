@@ -29,8 +29,8 @@ func New(name string, duration time.Duration, fn func() error) Task {
 
 // Poll Структура включает в себя срез задач и логер.
 type Poll struct {
-	tasks []Task
 	log   *slog.Logger
+	tasks []Task
 }
 
 // NewPoll Возвращает новый пул задач.
